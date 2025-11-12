@@ -13,17 +13,10 @@ class MultiheadAttention(nn.Module):
         self.w_qkv_dim = model_dim // head
         # number of head
         self.head = head
-        # weight (model_dim, w_qkv_dim * head * 3)
-        # → W_0^Q, ··· , W_(head-1)^Q, W_0^K, ··· , W_(head-1)^K, W_0^V, ··· , W_(head-1)^V
-        # self.weight = nn.Parameter(torch.randn(model_dim, self.w_qkv_dim * head * 3))
-        # bias (w_qkv_dim * head * 3)
-        # self.bias = nn.Parameter(torch.zeros(self.w_qkv_dim * head * 3))
-        self.qkv_proj = nn.Linear(model_dim, self.w_qkv_dim * head * 3)  # efficient
-        # output projection weight
-        # self.w_o = nn.Parameter(torch.randn(self.w_qkv_dim * head, model_dim))
-        # output projection bias
-        # self.bias_o = nn.Parameter(torch.zeros(model_dim))
-        self.out_proj = nn.Linear(self.w_qkv_dim * head, model_dim)  # efficient
+        # QKV projection
+        self.qkv_proj = nn.Linear(model_dim, self.w_qkv_dim * head * 3)
+        # output projection
+        self.out_proj = nn.Linear(self.w_qkv_dim * head, model_dim)
 
     def forward(self, input):
         # input: (batch_size, seq_len, model_dim)
