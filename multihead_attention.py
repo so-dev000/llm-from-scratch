@@ -8,11 +8,12 @@ from torch import nn
 class MultiheadAttention(nn.Module):
     def __init__(self, model_dim, head=8):
         super().__init__()
-        # dimension of query, key, value weights
-        self.w_qkv_dim = 64
+        # dimension of Q(query), K(key), V(value) weights
+        self.w_qkv_dim = model_dim // head
         # number of head
         self.head = head
         # weight (model_dim, w_qkv_dim * head * 3)
+        # → W_0^Q, ··· , W_(head-1)^Q, W_0^K, ··· , W_(head-1)^K, W_0^K, ··· , W_(head-1)^K
         self.weight = nn.Parameter(torch.randn(model_dim, self.w_qkv_dim * head * 3))
         # output projection weight
         self.w_o = nn.Parameter(torch.randn(self.w_qkv_dim * head, model_dim))
@@ -23,15 +24,24 @@ class MultiheadAttention(nn.Module):
         # input · self.weight
         qkv = torch.matmul(input, self.weight)
         # split into (batch_size, seq_len, w_qkv_dim * head) x 3
+        # query: Q_0, ··· , Q_(head-1)
+        # key:   K_0, ··· , K_(head-1)
+        # value: V_0, ··· , V_(head-1)
         query, key, value = torch.split(qkv, self.w_qkv_dim * self.head, dim=-1)
 
         # list of z calculated in each head
         z_list = []
         for idx in range(self.head):
             # get Q, K, V for each head: (batch_size, seq_len, w_qkv_dim)
-            q_head = query[:, :, idx * self.w_qkv_dim : (idx + 1) * self.w_qkv_dim]
-            k_head = key[:, :, idx * self.w_qkv_dim : (idx + 1) * self.w_qkv_dim]
-            v_head = value[:, :, idx * self.w_qkv_dim : (idx + 1) * self.w_qkv_dim]
+            q_head = query[
+                :, :, idx * self.w_qkv_dim : (idx + 1) * self.w_qkv_dim
+            ]  # Q_idx
+            k_head = key[
+                :, :, idx * self.w_qkv_dim : (idx + 1) * self.w_qkv_dim
+            ]  # K_idx
+            v_head = value[
+                :, :, idx * self.w_qkv_dim : (idx + 1) * self.w_qkv_dim
+            ]  # V_idx
 
             # Q x K^T: (batch_size, seq_len, seq_len)
             # k_head.transpose(-2, -1): (batch_size, w_qkv_dim, seq_len)
