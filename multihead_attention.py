@@ -4,6 +4,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+# TODO: for文の効率が悪いのでテンソル演算に置き換える
+
 
 class MultiheadAttention(nn.Module):
     def __init__(self, model_dim, head=8):
