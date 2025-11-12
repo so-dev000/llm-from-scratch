@@ -19,7 +19,6 @@ class MultiheadAttention(nn.Module):
         self.qkv_proj = nn.Linear(model_dim, self.w_qkv_dim * head * 3, bias=True)
         # output projection
         self.out_proj = nn.Linear(self.w_qkv_dim * head, model_dim, bias=True)
-        # dropout
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, inputs):
