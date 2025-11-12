@@ -14,9 +14,9 @@ class MultiheadAttention(nn.Module):
         # number of head
         self.head = head
         # QKV projection
-        self.qkv_proj = nn.Linear(model_dim, self.w_qkv_dim * head * 3)
+        self.qkv_proj = nn.Linear(model_dim, self.w_qkv_dim * head * 3, bias=True)
         # output projection
-        self.out_proj = nn.Linear(self.w_qkv_dim * head, model_dim)
+        self.out_proj = nn.Linear(self.w_qkv_dim * head, model_dim, bias=True)
 
     def forward(self, input):
         # input: (batch_size, seq_len, model_dim)
