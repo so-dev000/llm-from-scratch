@@ -1,4 +1,3 @@
-import time
 from math import sqrt
 
 import torch
@@ -7,8 +6,9 @@ from torch import nn
 
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, model_dim, head=8, dropout=0.1):
+    def __init__(self, model_dim, head=8, dropout=0.1, mask=False):
         super().__init__()
+        self.mask = mask
         if model_dim % head != 0:
             raise ValueError("model_dim must be divisible by head")
         # dimension of Q(query), K(key), V(value) weights
@@ -45,6 +45,12 @@ class MultiheadAttention(nn.Module):
         # key.transpose(-2, -1): (batch_size, head, w_qkv_dim, seq_len)
         scores = torch.matmul(query, key.transpose(-2, -1))
 
+        # set upper triangle of scores to negative infinity to
+        # prevent the model from peeking future tokens
+        if self.mask:
+            mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1).bool()
+            scores = scores.masked_fill(mask, float("-inf"))
+
         # divide by square root of key dimension
         scores /= sqrt(self.w_qkv_dim)
 
@@ -72,16 +78,13 @@ class MultiheadAttention(nn.Module):
 
 
 if __name__ == "__main__":
-    start = time.perf_counter()
     batch_size = 3
     seq_len = 6
     model_dim = 512
 
     input = torch.randn(batch_size, seq_len, model_dim)
-    model = MultiheadAttention(model_dim=model_dim)
+    model = MultiheadAttention(model_dim=model_dim, mask=False)
 
     print(f"Input shape: {input.shape}")  # (3, 6, 512)
     output = model.forward(input)
     print(f"Output shape: {output.shape}")  # (3, 6, 512)
-    end = time.perf_counter()
-    print(end - start)
