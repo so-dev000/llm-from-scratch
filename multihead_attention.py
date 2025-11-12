@@ -15,6 +15,8 @@ class MultiheadAttention(nn.Module):
         # weight (model_dim, w_qkv_dim * head * 3)
         # → W_0^Q, ··· , W_(head-1)^Q, W_0^K, ··· , W_(head-1)^K, W_0^V, ··· , W_(head-1)^V
         self.weight = nn.Parameter(torch.randn(model_dim, self.w_qkv_dim * head * 3))
+        # bias (w_qkv_dim * head * 3)
+        self.bias = nn.Parameter(torch.randn(self.w_qkv_dim * head * 3))
         # output projection weight
         self.w_o = nn.Parameter(torch.randn(self.w_qkv_dim * head, model_dim))
 
@@ -22,7 +24,7 @@ class MultiheadAttention(nn.Module):
         # input: (batch_size, seq_len, model_dim)
 
         # input · self.weight
-        qkv = torch.matmul(input, self.weight)
+        qkv = torch.matmul(input, self.weight) + self.bias
         # split into (batch_size, seq_len, w_qkv_dim * head) x 3
         # query: Q_0, ··· , Q_(head-1)
         # key:   K_0, ··· , K_(head-1)
