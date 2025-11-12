@@ -7,8 +7,10 @@ from torch import nn
 
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, model_dim, head=8):
+    def __init__(self, model_dim, head=8, dropout=0.1):
         super().__init__()
+        if model_dim % head != 0:
+            raise ValueError("model_dim must be divisible by head")
         # dimension of Q(query), K(key), V(value) weights
         self.w_qkv_dim = model_dim // head
         # number of head
@@ -17,13 +19,15 @@ class MultiheadAttention(nn.Module):
         self.qkv_proj = nn.Linear(model_dim, self.w_qkv_dim * head * 3, bias=True)
         # output projection
         self.out_proj = nn.Linear(self.w_qkv_dim * head, model_dim, bias=True)
+        # dropout
+        self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, input):
+    def forward(self, inputs):
         # input: (batch_size, seq_len, model_dim)
-        batch_size, seq_len, _ = input.shape
+        batch_size, seq_len, _ = inputs.shape
 
         # input · self.weight
-        qkv = self.qkv_proj(input)
+        qkv = self.qkv_proj(inputs)
 
         # (batch_size, seq_len, w_qkv_dim * head * 3) → (batch_size, seq_len, 3, head, w_qkv_dim)
         qkv = qkv.reshape(batch_size, seq_len, 3, self.head, self.w_qkv_dim)
@@ -47,6 +51,9 @@ class MultiheadAttention(nn.Module):
         # softmax: (batch_size, head, seq_len, seq_len)
         attention_weights = F.softmax(scores, dim=-1)
 
+        # dropout
+        attention_weights = self.dropout(attention_weights)
+
         # z: (batch_size, head, seq_len, w_qkv_dim)
         z = torch.matmul(attention_weights, value)
 
@@ -58,6 +65,9 @@ class MultiheadAttention(nn.Module):
 
         # output projection: (batch_size, seq_len, model_dim)
         output = self.out_proj(z)
+
+        # dropout
+        output = self.dropout(output)
         return output
 
 
