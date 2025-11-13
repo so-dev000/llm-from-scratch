@@ -50,7 +50,9 @@ class MultiheadAttention(nn.Module):
         # set upper triangle of scores to negative infinity to
         # prevent the model from peeking future tokens
         if self.mask:
-            mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1).bool()
+            mask = torch.triu(
+                torch.ones(seq_len, seq_len, device=scores.device), diagonal=1
+            ).bool()
             scores = scores.masked_fill(mask, float("-inf"))
 
         # softmax: (batch_size, head, seq_len, seq_len)
