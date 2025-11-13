@@ -18,7 +18,7 @@ class DecoderLayer(nn.Module):
     def forward(self, inputs, encoder_out):
         masked_attention_out = self.masked_attention(inputs)
         normalized_1 = self.normalizer_1(inputs + masked_attention_out)
-        attention_out = self.attention(inputs, encoder_out)
+        attention_out = self.attention(normalized_1, encoder_out)
         normalized_2 = self.normalizer_2(normalized_1 + attention_out)
         feed_forward_out = self.feed_forward(normalized_2)
         normalized_3 = self.normalizer_3(normalized_2 + feed_forward_out)

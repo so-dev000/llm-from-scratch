@@ -1,5 +1,3 @@
-from collections import OrderedDict
-
 import torch
 from torch import nn
 
@@ -9,17 +7,14 @@ from layer.encoder_layer import EncoderLayer
 class Encoder(nn.Module):
     def __init__(self, model_dim, encoder_num):
         super().__init__()
-        self.encoders = nn.Sequential(
-            OrderedDict(
-                [
-                    (f"encoder_layer_{idx}", EncoderLayer(model_dim))
-                    for idx in range(encoder_num)
-                ]
-            )
+        self.encoders = nn.ModuleList(
+            [EncoderLayer(model_dim) for _ in range(encoder_num)]
         )
 
     def forward(self, inputs):
-        return self.encoders(inputs)
+        for encoder_layer in self.encoders:
+            inputs = encoder_layer(inputs)
+        return inputs
 
 
 if __name__ == "__main__":
