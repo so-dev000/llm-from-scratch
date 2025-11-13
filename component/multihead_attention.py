@@ -15,43 +15,43 @@ class MultiheadAttention(nn.Module):
         self.w_qkv_dim = model_dim // head
         # number of head
         self.head = head
-        # QKV projection
-        self.qkv_proj = nn.Linear(model_dim, self.w_qkv_dim * head * 3, bias=True)
-        # output projection
+        # projections for Q, K, V: (model_dim, self.w_qkv_dim * head = model_dim)
+        self.q_proj = nn.Linear(model_dim, self.w_qkv_dim * head, bias=True)
+        self.k_proj = nn.Linear(model_dim, self.w_qkv_dim * head, bias=True)
+        self.v_proj = nn.Linear(model_dim, self.w_qkv_dim * head, bias=True)
+        # output projection: (self.w_qkv_dim * head = model_dim, model_dim)
         self.out_proj = nn.Linear(self.w_qkv_dim * head, model_dim, bias=True)
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, inputs):
+    def forward(self, inputs, encoder_out=None):
         # input: (batch_size, seq_len, model_dim)
         batch_size, seq_len, _ = inputs.shape
 
-        # input · self.weight
-        qkv = self.qkv_proj(inputs)
+        # Projection: (batch_size, seq_len, model_dim) → (batch_size, seq_len, model_dim)
+        query = self.q_proj(inputs)
+        key = self.k_proj(encoder_out if encoder_out is not None else inputs)
+        value = self.v_proj(encoder_out if encoder_out is not None else inputs)
 
-        # (batch_size, seq_len, w_qkv_dim * head * 3) → (batch_size, seq_len, 3, head, w_qkv_dim)
-        qkv = qkv.reshape(batch_size, seq_len, 3, self.head, self.w_qkv_dim)
-
-        # (batch_size, seq_len, 3, head, w_qkv_dim) → (3, batch_size, head, seq_len, w_qkv_dim)
-        qkv = qkv.permute(2, 0, 3, 1, 4)
-
-        # split into (batch_size, head, seq_len, w_qkv_dim) x 3
-        # query: Q_0, ··· , Q_(head-1)
-        # key:   K_0, ··· , K_(head-1)
-        # value: V_0, ··· , V_(head-1)
-        query, key, value = qkv[0], qkv[1], qkv[2]
+        # Reshape and transpose for multi-head
+        # (batch_size, seq_len, model_dim) → (batch_size, seq_len, head, w_qkv_dim) → (batch_size, head, seq_len, w_qkv_dim)
+        query = query.view(batch_size, seq_len, self.head, self.w_qkv_dim).transpose(
+            1, 2
+        )
+        key = key.view(batch_size, -1, self.head, self.w_qkv_dim).transpose(1, 2)
+        value = value.view(batch_size, -1, self.head, self.w_qkv_dim).transpose(1, 2)
 
         # Q x K^T: (batch_size, head, seq_len, seq_len)
         # key.transpose(-2, -1): (batch_size, head, w_qkv_dim, seq_len)
         scores = torch.matmul(query, key.transpose(-2, -1))
+
+        # divide by square root of key dimension
+        scores /= sqrt(self.w_qkv_dim)
 
         # set upper triangle of scores to negative infinity to
         # prevent the model from peeking future tokens
         if self.mask:
             mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1).bool()
             scores = scores.masked_fill(mask, float("-inf"))
-
-        # divide by square root of key dimension
-        scores /= sqrt(self.w_qkv_dim)
 
         # softmax: (batch_size, head, seq_len, seq_len)
         attention_weights = F.softmax(scores, dim=-1)
@@ -63,10 +63,11 @@ class MultiheadAttention(nn.Module):
         z = torch.matmul(attention_weights, value)
 
         # (batch_size, head, seq_len, w_qkv_dim) → (batch_size, seq_len, head, w_qkv_dim)
-        z = z.transpose(1, 2)
+        # cf: https://qiita.com/kenta1984/items/d68b72214ce92beebbe2
+        z = z.transpose(1, 2).contiguous()
 
         # (batch_size, seq_len, head, w_qkv_dim) → (batch_size, seq_len, head * w_qkv_dim)
-        z = z.reshape(batch_size, seq_len, self.head * self.w_qkv_dim)
+        z = z.view(batch_size, seq_len, self.head * self.w_qkv_dim)
 
         # output projection: (batch_size, seq_len, model_dim)
         output = self.out_proj(z)
