@@ -1,4 +1,3 @@
-import torch
 from torch import nn
 
 from component.feed_forward import FeedForward
@@ -19,16 +18,3 @@ class EncoderLayer(nn.Module):
         feed_forward_out = self.feed_forward(normalized_1)
         normalized_2 = self.normalizer_2(normalized_1 + feed_forward_out)
         return normalized_2
-
-
-if __name__ == "__main__":
-    batch_size = 3
-    seq_len = 6
-    model_dim = 512
-
-    input = torch.randn(batch_size, seq_len, model_dim)
-    encoder = EncoderLayer(model_dim=model_dim)
-
-    print(f"Input shape: {input.shape}")  # (3, 6, 512)
-    output = encoder.forward(input)
-    print(f"Output shape: {output.shape}")  # (3, 6, 512)

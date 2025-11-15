@@ -1,4 +1,3 @@
-import torch
 from torch import nn
 
 
@@ -18,16 +17,3 @@ class FeedForward(nn.Module):
         # dropout
         output = self.dropout(output)
         return output
-
-
-if __name__ == "__main__":
-    batch_size = 3
-    seq_len = 6
-    model_dim = 512
-
-    input = torch.randn(batch_size, seq_len, model_dim)
-    model = FeedForward(model_dim=model_dim)
-
-    print(f"Input shape: {input.shape}")  # (3, 6, 512)
-    output = model.forward(input)
-    print(f"Output shape: {output.shape}")  # (3, 6, 512)
