@@ -4,24 +4,27 @@ class Tokenizer:
         self.vocab = {}  # int -> bytes
 
     def train(self, texts, vocab_size):
-        # concat all texts
-        ids = []
-        for text in texts:
-            # 1 byte, 8 bits, 0~255
-            ids.extend(list(text.encode("utf-8")))
+        # process each text independently
+        all_ids = [list(text.encode("utf-8")) for text in texts]
 
         # initialize vocab
+        # 1 byte, 8 bits, 0~255
         for i in range(256):
             self.vocab[i] = bytes([i])
 
         num_merges = vocab_size - 256
         for i in range(num_merges):
-            stats = self._get_stats(ids)
+            # collect stats from all texts independently
+            stats = {}
+            for ids in all_ids:
+                for pair, count in self._get_stats(ids).items():
+                    stats[pair] = stats.get(pair, 0) + count
             if not stats:
                 break
             pair = max(stats, key=stats.get)
             idx = 256 + i
-            ids = self._merge(ids, pair, idx)
+            # Apply merge to each text independently
+            all_ids = [self._merge(ids, pair, idx) for ids in all_ids]
             self.merges[pair] = idx
             self.vocab[idx] = self.vocab[pair[0]] + self.vocab[pair[1]]
 
