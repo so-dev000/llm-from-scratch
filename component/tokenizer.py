@@ -1,11 +1,26 @@
+import regex
+
+
 class Tokenizer:
-    def __init__(self):
+    def __init__(self, pattern=None):
         self.merges = {}  # (int, int) -> int
         self.vocab = {}  # int -> bytes
+        gpt2_pattern = (
+            r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?"
+            r"[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
+        )
+        self.compiled_pattern = regex.compile(pattern or gpt2_pattern)
+
+    def _split_text(self, text):
+        return self.compiled_pattern.findall(text)
 
     def train(self, texts, vocab_size):
-        # process each text independently
-        all_ids = [list(text.encode("utf-8")) for text in texts]
+        # Pre-tokenize: split by pattern, then encode each chunk
+        all_ids = []
+        for text in texts:
+            chunks = self._split_text(text)
+            for chunk in chunks:
+                all_ids.append(list(chunk.encode("utf-8")))
 
         # initialize vocab
         # 1 byte, 8 bits, 0~255
@@ -14,7 +29,7 @@ class Tokenizer:
 
         num_merges = vocab_size - 256
         for i in range(num_merges):
-            # collect stats from all texts independently
+            # collect stats from all chunks
             stats = {}
             for ids in all_ids:
                 for pair, count in self._get_stats(ids).items():
@@ -23,20 +38,26 @@ class Tokenizer:
                 break
             pair = max(stats, key=stats.get)
             idx = 256 + i
-            # Apply merge to each text independently
+            # Apply merge to each chunk
             all_ids = [self._merge(ids, pair, idx) for ids in all_ids]
             self.merges[pair] = idx
             self.vocab[idx] = self.vocab[pair[0]] + self.vocab[pair[1]]
 
     def encode(self, text):
-        tokens = list(text.encode("utf-8"))
-        while len(tokens) >= 2:
-            stats = self._get_stats(tokens)
-            pair = min(stats, key=lambda p: self.merges.get(p, float("inf")))
-            if pair not in self.merges:
-                break  # no merge available
-            idx = self.merges[pair]
-            tokens = self._merge(tokens, pair, idx)
+        # Pre-tokenize: split by pattern, then encode each chunk
+        chunks = self._split_text(text)
+        tokens = []
+        for chunk in chunks:
+            chunk_tokens = list(chunk.encode("utf-8"))
+            # Apply learned merges to each chunk
+            while len(chunk_tokens) >= 2:
+                stats = self._get_stats(chunk_tokens)
+                pair = min(stats, key=lambda p: self.merges.get(p, float("inf")))
+                if pair not in self.merges:
+                    break  # no merge available
+                idx = self.merges[pair]
+                chunk_tokens = self._merge(chunk_tokens, pair, idx)
+            tokens.extend(chunk_tokens)
         return tokens
 
     def decode(self, ids):
