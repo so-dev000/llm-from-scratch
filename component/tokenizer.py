@@ -1,18 +1,63 @@
 class Tokenizer:
     def __init__(self):
-        super().__init__()
+        self.merges = {}  # (int, int) -> int
+        self.vocab = {}  # int -> bytes
 
-    def train(self, text, vocab_size):
-        pass
+    def train(self, texts, vocab_size):
+        # concat all texts
+        ids = []
+        for text in texts:
+            # 1 byte, 8 bits, 0~255
+            ids.extend(list(text.encode("utf-8")))
+
+        # initialize vocab
+        for i in range(256):
+            self.vocab[i] = bytes([i])
+
+        num_merges = vocab_size - 256
+        for i in range(num_merges):
+            stats = self._get_stats(ids)
+            if not stats:
+                break
+            pair = max(stats, key=stats.get)
+            idx = 256 + i
+            ids = self._merge(ids, pair, idx)
+            self.merges[pair] = idx
+            self.vocab[idx] = self.vocab[pair[0]] + self.vocab[pair[1]]
 
     def encode(self, text):
-        pass
+        tokens = list(text.encode("utf-8"))
+        while len(tokens) >= 2:
+            stats = self._get_stats(tokens)
+            pair = min(stats, key=lambda p: self.merges.get(p, float("inf")))
+            if pair not in self.merges:
+                break  # no merge available
+            idx = self.merges[pair]
+            tokens = self._merge(tokens, pair, idx)
+        return tokens
 
-    def decode(self, text):
-        pass
+    def decode(self, ids):
+        tokens = b"".join(self.vocab[i] for i in ids)
+        text = tokens.decode("utf-8", errors="replace")
+        return text
 
     def _get_stats(self, ids):
-        pass
+        # get adjacent pair counts
+        counts = {}
+        for i in range(len(ids) - 1):
+            pair = (ids[i], ids[i + 1])
+            counts[pair] = counts.get(pair, 0) + 1
+        return counts
 
     def _merge(self, ids, pair, idx):
-        pass
+        newids = []
+        i = 0
+        n = len(ids)
+        while i < n:
+            if i < n - 1 and ids[i] == pair[0] and ids[i + 1] == pair[1]:
+                newids.append(idx)
+                i += 2
+            else:
+                newids.append(ids[i])
+                i += 1
+        return newids

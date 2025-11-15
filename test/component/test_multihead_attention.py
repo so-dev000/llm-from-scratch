@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from component.multihead_attention import MultiheadAttention
@@ -14,3 +15,8 @@ class TestMultiheadAttention:
         output = attention(inputs)
 
         assert output.shape == (batch_size, seq_len, model_dim)
+
+    def test_invalid_model_dim_raises_value_error(self):
+        model_dim = 513  # Not divisible by default head=8
+        with pytest.raises(ValueError, match="model_dim must be divisible by head"):
+            MultiheadAttention(model_dim=model_dim)
