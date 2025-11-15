@@ -10,4 +10,4 @@
 
 ## Tokenizer
 
-[Neural Machine Translation of Rare Words with Subword Units]
+[Neural Machine Translation of Rare Words with Subword Units](https://arxiv.org/pdf/1508.07909)
