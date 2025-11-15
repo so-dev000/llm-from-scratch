@@ -5,7 +5,6 @@ from component.token_embedding import TokenEmbedding
 
 class TestTokenEmbedding:
     def test_output_shape(self):
-        """Test output shape is correct"""
         vocab_size = 30000
         model_dim = 512
         batch_size = 2
