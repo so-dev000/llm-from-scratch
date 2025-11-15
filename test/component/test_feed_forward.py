@@ -5,7 +5,6 @@ from component.feed_forward import FeedForward
 
 class TestFeedForward:
     def test_output_shape(self):
-        """Test output shape is correct"""
         batch_size = 3
         seq_len = 6
         model_dim = 512
