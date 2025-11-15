@@ -2,12 +2,18 @@
 
 ## Transformer
 
-[Attention Is All You Need](https://arxiv.org/abs/1706.03762)
+- [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
 
-[The Illustrated Transformer](https://jalammar.github.io/illustrated-transformer/)
+- [The Illustrated Transformer](https://jalammar.github.io/illustrated-transformer/)
 
-[Transformer Explainer](https://poloclub.github.io/transformer-explainer/)
+- [Transformer Explainer](https://poloclub.github.io/transformer-explainer/)
 
 ## Tokenizer
 
-[Neural Machine Translation of Rare Words with Subword Units](https://arxiv.org/pdf/1508.07909)
+- [Normalization and pre-tokenization](https://huggingface.co/learn/llm-course/chapter6/4)
+
+- [Byte-Pair Encoding tokenization](https://huggingface.co/learn/llm-course/chapter6/5)
+
+- [Let's build the GPT Tokenizer](https://www.youtube.com/watch?v=zduSFxRajkE)
+
+- [Tiktokenizer](https://tiktokenizer.vercel.app/)
