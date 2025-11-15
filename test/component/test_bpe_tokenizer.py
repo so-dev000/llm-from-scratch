@@ -1,7 +1,7 @@
 from component.bpe_tokenizer import BPETokenizer
 
 
-class TestTokenizer:
+class TestBPETokenizer:
     def test_train(self):
         tokenizer = BPETokenizer()
         tokenizer.train(["hello world"], vocab_size=300)
