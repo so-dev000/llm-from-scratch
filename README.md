@@ -8,6 +8,8 @@
 
 - [Transformer Explainer](https://poloclub.github.io/transformer-explainer/)
 
+- [Positional Encoding](https://medium.com/@hunter-j-phillips/positional-encoding-7a93db4109e6)
+
 ## Tokenizer
 
 - [Normalization and pre-tokenization](https://huggingface.co/learn/llm-course/chapter6/4)
@@ -15,5 +17,5 @@
 - [Byte-Pair Encoding tokenization](https://huggingface.co/learn/llm-course/chapter6/5)
 
 - [Let's build the GPT Tokenizer](https://www.youtube.com/watch?v=zduSFxRajkE)
-
+  w
 - [Tiktokenizer](https://tiktokenizer.vercel.app/?model=gpt2)

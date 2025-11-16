@@ -2,18 +2,26 @@ from torch import nn
 
 from block.decoder import Decoder
 from block.encoder import Encoder
+from component.positional_encoding import PositionalEncoding
+from component.token_embedding import TokenEmbedding
 
 
 class Transformer(nn.Module):
-    def __init__(self, model_dim, encoder_num, decoder_num):
+    def __init__(self, vocab_size, model_dim, encoder_num, decoder_num):
         super().__init__()
-        self.model_dim = model_dim
-        self.encoder_num = encoder_num
-        self.decoder_num = decoder_num
-        self.encoder = Encoder(self.model_dim, self.encoder_num)
-        self.decoder = Decoder(self.model_dim, self.decoder_num)
+        self.token_embedding = TokenEmbedding(vocab_size, model_dim)
+        self.positional_encoding = PositionalEncoding(model_dim)
+        self.encoder = Encoder(model_dim, encoder_num)
+        self.decoder = Decoder(model_dim, decoder_num)
 
-    def forward(self, encoder_inputs, decoder_inputs):
-        encoder_out = self.encoder(encoder_inputs)
-        decoder_out = self.decoder(decoder_inputs, encoder_out)
+    def forward(self, source_tokens, target_tokens):
+        # (batch_size, source_len, model_dim)
+        source_embed = self.token_embedding(source_tokens)
+        source_embed = self.positional_encoding(source_embed)
+        # (batch_size, target, model_dim)
+        target_embed = self.token_embedding(target_tokens)
+        target_embed = self.positional_encoding(target_embed)
+
+        encoder_out = self.encoder(source_embed)
+        decoder_out = self.decoder(target_embed, encoder_out)
         return decoder_out
