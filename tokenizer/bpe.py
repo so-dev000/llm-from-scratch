@@ -1,4 +1,5 @@
 import regex
+from tqdm import tqdm
 
 
 class BPE:
@@ -44,7 +45,7 @@ class BPE:
                 all_ids.append(chunk_ids)
 
         num_merges = vocab_size - 256 - num_special
-        for i in range(num_merges):
+        for i in tqdm(range(num_merges), desc="Training BPE"):
             # collect stats from all chunks
             stats = {}
             for ids in all_ids:

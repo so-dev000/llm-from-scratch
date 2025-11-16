@@ -51,11 +51,14 @@ class MultiheadAttention(nn.Module):
 
         # Apply mask
         if mask is not None:
-            if mask.dim() == 2:  # (seq_len, seq_len)
-                mask = mask.unsqueeze(0).unsqueeze(0)
-            elif mask.dim() == 3:  # (batch, seq_len, seq_len)
+            if mask.dim() == 2:
+                if encoder_out is not None:  # Cross-attention, assume padding mask
+                    mask = mask.unsqueeze(1).unsqueeze(2)
+                else:  # Self-attention, assume causal mask
+                    mask = mask.unsqueeze(0).unsqueeze(0)
+            elif mask.dim() == 3:  # attention mask (batch, query_seq_len, key_seq_len)
                 mask = mask.unsqueeze(1)
-            scores = scores.masked_fill(~mask, float("-inf"))
+            scores = scores.masked_fill(~mask, -1e9)
 
         # softmax: (batch_size, head, seq_len, seq_len)
         attention_weights = F.softmax(scores, dim=-1)

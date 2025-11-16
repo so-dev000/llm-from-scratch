@@ -46,3 +46,19 @@ class TestMultiheadAttention:
         output = attention(inputs, mask=mask)
 
         assert output.shape == (batch_size, seq_len, model_dim)
+
+    def test_cross_attention_with_padding_mask(self):
+        batch_size = 2
+        tgt_seq_len = 4
+        src_seq_len = 5
+        model_dim = 512
+
+        attention = MultiheadAttention(model_dim=model_dim)
+        query_inputs = torch.randn(batch_size, tgt_seq_len, model_dim)
+        encoder_outputs = torch.randn(batch_size, src_seq_len, model_dim)
+        mask = torch.ones(batch_size, src_seq_len).bool()
+        mask[:, -2:] = False  # Mask last two tokens of source
+
+        output = attention(query_inputs, encoder_out=encoder_outputs, mask=mask)
+
+        assert output.shape == (batch_size, tgt_seq_len, model_dim)

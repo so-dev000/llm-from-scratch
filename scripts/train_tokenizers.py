@@ -20,13 +20,13 @@ print(f"Loaded {len(en_texts)} sentence pairs")
 # train en tokenizer
 print("start training en_tokenizer")
 en_tokenizer = BPE()
-en_tokenizer.train(en_texts[:5000], vocab_size=2000)
+en_tokenizer.train(en_texts, vocab_size=6000)
 print(f"English vocab size: {len(en_tokenizer.vocab)}")
 
 # train ja tokenizer
 print("start training ja_tokenizer")
 ja_tokenizer = BPE()
-ja_tokenizer.train(ja_texts[:5000], vocab_size=2000)
+ja_tokenizer.train(ja_texts, vocab_size=6000)
 print(f"Japanese vocab size: {len(ja_tokenizer.vocab)}")
 
 os.makedirs("checkpoints/tokenizers", exist_ok=True)

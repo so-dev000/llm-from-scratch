@@ -4,6 +4,7 @@ import pickle
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from data.translation_dataset import TranslationDataset
 from datasets import load_dataset
@@ -35,7 +36,7 @@ def train_epoch(model, loader, optimizer, criterion, device):
     model.train()
     total_loss = 0
 
-    for batch_idx, batch in enumerate(loader):
+    for batch_idx, batch in enumerate(tqdm(loader, desc="Training")):
         src = batch["src"].to(device)
         tgt = batch["tgt"].to(device)
         src_mask = batch["src_mask"].to(device)
@@ -59,29 +60,18 @@ def train_epoch(model, loader, optimizer, criterion, device):
 
         # Forward pass
         output = model(
-            src, tgt_input, src_mask=src_mask_expanded, tgt_mask=tgt_input_mask
+            src,
+            tgt_input,
+            encoder_src_mask=src_mask_expanded,
+            decoder_src_mask=src_mask,
+            tgt_mask=tgt_input_mask,
         )
-
-        # Check for NaN
-        if torch.isnan(output).any():
-            print(f"NaN detected in output at batch {batch_idx}")
-            print(f"  src shape: {src.shape}, range: {src.min()}-{src.max()}")
-            print(
-                f"  tgt_input shape: {tgt_input.shape}, "
-                f"range: {tgt_input.min()}-{tgt_input.max()}"
-            )
-            print("  Skipping this batch")
-            continue
 
         # Calculate loss
         output = output.reshape(-1, output.size(-1))
         tgt_output = tgt_output.reshape(-1)
 
         loss = criterion(output, tgt_output)
-
-        if torch.isnan(loss):
-            print(f"NaN loss at batch {batch_idx}, skipping")
-            continue
 
         # Backward pass
         optimizer.zero_grad()
@@ -91,9 +81,6 @@ def train_epoch(model, loader, optimizer, criterion, device):
 
         total_loss += loss.item()
 
-        if batch_idx % 10 == 0:
-            print(f"Batch {batch_idx}/{len(loader)}, Loss: {loss.item():.4f}")
-
     return total_loss / len(loader)
 
 
@@ -102,7 +89,7 @@ def evaluate(model, loader, criterion, device):
     total_loss = 0
 
     with torch.no_grad():
-        for batch in loader:
+        for batch in tqdm(loader, desc="Evaluating"):
             src = batch["src"].to(device)
             tgt = batch["tgt"].to(device)
             src_mask = batch["src_mask"].to(device)
@@ -119,7 +106,11 @@ def evaluate(model, loader, criterion, device):
             tgt_input_mask = tgt_combined_mask[:, :-1, :-1]
 
             output = model(
-                src, tgt_input, src_mask=src_mask_expanded, tgt_mask=tgt_input_mask
+                src,
+                tgt_input,
+                encoder_src_mask=src_mask_expanded,
+                decoder_src_mask=src_mask,
+                tgt_mask=tgt_input_mask,
             )
 
             output = output.reshape(-1, output.size(-1))
