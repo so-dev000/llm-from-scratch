@@ -15,7 +15,14 @@ class Transformer(nn.Module):
         self.decoder = Decoder(model_dim, decoder_num)
         self.decoder_proj = nn.Linear(model_dim, vocab_size)
 
-    def forward(self, source_tokens, target_tokens, src_mask=None, tgt_mask=None):
+    def forward(
+        self,
+        source_tokens,
+        target_tokens,
+        encoder_src_mask=None,
+        decoder_src_mask=None,
+        tgt_mask=None,
+    ):
         # (batch_size, source_len, model_dim)
         source_embed = self.token_embedding(source_tokens)
         source_embed = self.positional_encoding(source_embed)
@@ -23,7 +30,9 @@ class Transformer(nn.Module):
         target_embed = self.token_embedding(target_tokens)
         target_embed = self.positional_encoding(target_embed)
 
-        encoder_out = self.encoder(source_embed, src_mask)
-        decoder_out = self.decoder(target_embed, encoder_out, tgt_mask, src_mask)
+        encoder_out = self.encoder(source_embed, encoder_src_mask)
+        decoder_out = self.decoder(
+            target_embed, encoder_out, tgt_mask, decoder_src_mask
+        )
         output = self.decoder_proj(decoder_out)
         return output
