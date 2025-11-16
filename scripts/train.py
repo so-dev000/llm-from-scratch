@@ -35,7 +35,7 @@ def train_epoch(model, loader, optimizer, criterion, device):
     model.train()
     total_loss = 0
 
-    for batch_idx, batch in enumerate(tqdm(loader, desc="Training")):
+    for batch in tqdm(loader, desc="Training"):
         src = batch["src"].to(device)
         tgt = batch["tgt"].to(device)
         src_mask = batch["src_mask"].to(device)
