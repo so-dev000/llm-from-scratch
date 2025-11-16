@@ -3,7 +3,7 @@ name = "llm-from-scratch"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "datasets>=4.4.1",
     "huggingface-hub>=1.1.4",
@@ -27,7 +27,7 @@ dev = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py314"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
