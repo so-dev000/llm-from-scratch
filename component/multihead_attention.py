@@ -6,9 +6,8 @@ from torch import nn
 
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, model_dim, head=8, dropout=0.1, mask=False):
+    def __init__(self, model_dim, head=8, dropout=0.1):
         super().__init__()
-        self.mask = mask
         if model_dim % head != 0:
             raise ValueError("model_dim must be divisible by head")
         # dimension of Q(query), K(key), V(value) weights
@@ -23,7 +22,7 @@ class MultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(self.w_qkv_dim * head, model_dim, bias=True)
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, inputs, encoder_out=None):
+    def forward(self, inputs, encoder_out=None, mask=None):
         # input: (batch_size, seq_len, model_dim)
         batch_size, seq_len, _ = inputs.shape
 
@@ -50,13 +49,13 @@ class MultiheadAttention(nn.Module):
         # divide by square root of key dimension
         scores /= sqrt(self.w_qkv_dim)
 
-        # set upper triangle of scores to negative infinity to
-        # prevent the model from peeking future tokens
-        if self.mask:
-            mask = torch.triu(
-                torch.ones(seq_len, seq_len, device=scores.device), diagonal=1
-            ).bool()
-            scores = scores.masked_fill(mask, float("-inf"))
+        # Apply mask
+        if mask is not None:
+            if mask.dim() == 2:  # (seq_len, seq_len)
+                mask = mask.unsqueeze(0).unsqueeze(0)
+            elif mask.dim() == 3:  # (batch, seq_len, seq_len)
+                mask = mask.unsqueeze(1)
+            scores = scores.masked_fill(~mask, float("-inf"))
 
         # softmax: (batch_size, head, seq_len, seq_len)
         attention_weights = F.softmax(scores, dim=-1)

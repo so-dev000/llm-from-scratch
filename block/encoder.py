@@ -10,7 +10,7 @@ class Encoder(nn.Module):
             [EncoderLayer(model_dim) for _ in range(encoder_num)]
         )
 
-    def forward(self, inputs):
+    def forward(self, inputs, mask=None):
         for encoder_layer in self.encoders:
-            inputs = encoder_layer(inputs)
+            inputs = encoder_layer(inputs, mask)
         return inputs

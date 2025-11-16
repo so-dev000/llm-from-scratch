@@ -12,8 +12,8 @@ class EncoderLayer(nn.Module):
         self.feed_forward = FeedForward(model_dim)
         self.normalizer_2 = nn.LayerNorm(model_dim)
 
-    def forward(self, inputs):
-        attention_out = self.attention(inputs)
+    def forward(self, inputs, mask=None):
+        attention_out = self.attention(inputs, mask=mask)
         normalized_1 = self.normalizer_1(inputs + attention_out)
         feed_forward_out = self.feed_forward(normalized_1)
         normalized_2 = self.normalizer_2(normalized_1 + feed_forward_out)
