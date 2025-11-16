@@ -6,6 +6,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+import wandb
 from data.translation_dataset import TranslationDataset
 from datasets import load_dataset
 from model.transformer import Transformer
@@ -80,6 +81,7 @@ def train_epoch(model, loader, optimizer, criterion, device):
         optimizer.step()
 
         total_loss += loss.item()
+        wandb.log({"batch_train_loss": loss.item()})
 
     return total_loss / len(loader)
 
@@ -123,6 +125,19 @@ def evaluate(model, loader, criterion, device):
 
 
 def main():
+    wandb.init(
+        project="llm-from-scratch",
+        config={
+            "learning_rate": LEARNING_RATE,
+            "epochs": NUM_EPOCHS,
+            "batch_size": BATCH_SIZE,
+            "max_length": MAX_LENGTH,
+            "model_dim": MODEL_DIM,
+            "encoder_layers": ENCODER_LAYERS,
+            "decoder_layers": DECODER_LAYERS,
+        },
+    )
+
     # Load tokenizers
     print("Loading tokenizers...")
     with open("checkpoints/tokenizers/bsd_ja_en/en_bpe.pkl", "rb") as f:
@@ -194,6 +209,14 @@ def main():
         val_loss = evaluate(model, val_loader, criterion, device)
         print(f"Validation Loss: {val_loss:.4f}")
 
+        wandb.log(
+            {
+                "epoch": epoch + 1,
+                "train_loss": train_loss,
+                "val_loss": val_loss,
+            }
+        )
+
         # Save best model
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -209,6 +232,8 @@ def main():
                 "checkpoints/models/best_model.pt",
             )
             print(f"Best model saved (val_loss: {val_loss:.4f})")
+
+    wandb.finish()
 
 
 if __name__ == "__main__":
