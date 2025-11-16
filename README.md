@@ -4,7 +4,9 @@
 
 ```bash
 cp .env.example .env
-# Edit .env and set your HF_REPO_ID and HF_TOKEN
+# Edit .env:
+# - HF_REPO_ID: your-username/repo-name
+# - HF_TOKEN: get from https://huggingface.co/settings/tokens (with write permission)
 ```
 
 ## Usage
