@@ -1,5 +1,7 @@
 # Data files
 **/data/
+datasets/
+checkpoints/
 
 # Virtual environments
 .venv/
@@ -75,6 +77,7 @@ coverage.xml
 *.pt
 *.ckpt
 *.safetensors
+*.pkl
 
 # Temporary files
 *.tmp
