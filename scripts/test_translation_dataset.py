@@ -11,7 +11,7 @@ with open("checkpoints/tokenizers/bsd_ja_en/ja_bpe.pkl", "rb") as f:
     ja_tokenizer = pickle.load(f)
 
 # load dataset
-dataset = load_dataset("ryo0634/bsd_ja_en", cache_dir="./data")
+dataset = load_dataset("ryo0634/bsd_ja_en", cache_dir="./datasets")
 
 train_dataset = TranslationDataset(
     data=dataset["train"],
