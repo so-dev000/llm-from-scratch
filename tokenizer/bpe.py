@@ -2,9 +2,17 @@ import regex
 
 
 class BPE:
-    def __init__(self, pattern=None):
+    def __init__(self, pattern=None, special_tokens=None):
         self.merges = {}  # (int, int) -> int
         self.vocab = {}  # int -> bytes
+        # initialize special tokens
+        default_special_tokens = {
+            "<PAD>": 0,  # padding
+            "<UNK>": 1,  # unknown
+            "<BOS>": 2,  # beginning of sentence
+            "<EOS>": 3,  # end of sentence
+        }
+        self.special_tokens = special_tokens or default_special_tokens
         gpt2_pattern = (
             r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?"
             r"[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
@@ -15,19 +23,27 @@ class BPE:
         return self.compiled_pattern.findall(text)
 
     def train(self, texts, vocab_size):
+        num_special = len(self.special_tokens)
+        # initialize vocab
+        # special token
+        for token, idx in self.special_tokens.items():
+            self.vocab[idx] = token.encode("utf-8")
+
+        # byte token
+        # 1 byte, 8 bits, 0~255
+        for i in range(256):
+            self.vocab[num_special + i] = bytes([i])
+
         # Pre-tokenize: split by pattern, then encode each chunk
         all_ids = []
         for text in texts:
             chunks = self._split_text(text)
             for chunk in chunks:
-                all_ids.append(list(chunk.encode("utf-8")))
+                byte_vals = list(chunk.encode("utf-8"))
+                chunk_ids = [num_special + b for b in byte_vals]
+                all_ids.append(chunk_ids)
 
-        # initialize vocab
-        # 1 byte, 8 bits, 0~255
-        for i in range(256):
-            self.vocab[i] = bytes([i])
-
-        num_merges = vocab_size - 256
+        num_merges = vocab_size - 256 - num_special
         for i in range(num_merges):
             # collect stats from all chunks
             stats = {}
@@ -37,18 +53,26 @@ class BPE:
             if not stats:
                 break
             pair = max(stats, key=stats.get)
-            idx = 256 + i
+            idx = num_special + 256 + i
             # Apply merge to each chunk
             all_ids = [self._merge(ids, pair, idx) for ids in all_ids]
             self.merges[pair] = idx
             self.vocab[idx] = self.vocab[pair[0]] + self.vocab[pair[1]]
 
-    def encode(self, text):
+    def encode(self, text, add_special_tokens=False):
+        num_special = len(self.special_tokens)
+
         # Pre-tokenize: split by pattern, then encode each chunk
         chunks = self._split_text(text)
         tokens = []
+
+        if add_special_tokens:
+            tokens.append(self.special_tokens["<BOS>"])
+
         for chunk in chunks:
-            chunk_tokens = list(chunk.encode("utf-8"))
+            byte_vals = list(chunk.encode("utf-8"))
+            chunk_tokens = [num_special + b for b in byte_vals]
+
             # Apply learned merges to each chunk
             while len(chunk_tokens) >= 2:
                 stats = self._get_stats(chunk_tokens)
@@ -58,9 +82,17 @@ class BPE:
                 idx = self.merges[pair]
                 chunk_tokens = self._merge(chunk_tokens, pair, idx)
             tokens.extend(chunk_tokens)
+
+        if add_special_tokens:
+            tokens.append(self.special_tokens["<EOS>"])
+
         return tokens
 
-    def decode(self, ids):
+    def decode(self, ids, skip_special_tokens=True):
+        if skip_special_tokens:
+            special_ids = set(self.special_tokens.values())
+            ids = [i for i in ids if i not in special_ids]
+
         tokens = b"".join(self.vocab[i] for i in ids)
         text = tokens.decode("utf-8", errors="replace")
         return text

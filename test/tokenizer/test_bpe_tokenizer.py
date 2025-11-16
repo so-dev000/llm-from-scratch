@@ -8,7 +8,7 @@ class TestBPE:
 
         assert len(tokenizer.vocab) >= 256
         assert len(tokenizer.merges) > 0
-        assert len(tokenizer.vocab) == 256 + len(tokenizer.merges)
+        assert len(tokenizer.vocab) == 4 + 256 + len(tokenizer.merges)
 
     def test_encode_decode_roundtrip(self):
         tokenizer = BPE()
@@ -69,7 +69,27 @@ class TestBPE:
 
     def test_complete_all_merges(self):
         tokenizer = BPE()
-        tokenizer.train(["aaa"], vocab_size=257)
+        tokenizer.train(["aaa"], vocab_size=261)
 
         assert len(tokenizer.merges) == 1
-        assert len(tokenizer.vocab) == 257
+        assert len(tokenizer.vocab) == 261
+
+    def test_special_tokens_encode(self):
+        tokenizer = BPE()
+        tokenizer.train(["hello"], vocab_size=300)
+
+        encoded = tokenizer.encode("hello", add_special_tokens=True)
+
+        assert encoded[0] == 2  # <BOS>
+        assert encoded[-1] == 3  # <EOS>
+
+    def test_special_tokens_decode(self):
+        tokenizer = BPE()
+        tokenizer.train(["hello"], vocab_size=300)
+
+        encoded = tokenizer.encode("hello", add_special_tokens=True)
+        decoded = tokenizer.decode(encoded, skip_special_tokens=True)
+
+        assert decoded == "hello"
+        assert "<BOS>" not in decoded
+        assert "<EOS>" not in decoded
