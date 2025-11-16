@@ -13,7 +13,6 @@ from model.transformer import Transformer
 from utils.collate import collate
 from utils.masking import combine_masks, create_causal_mask
 
-# Hyperparameters
 BATCH_SIZE = 64
 LEARNING_RATE = 3e-5
 NUM_EPOCHS = 10
@@ -24,7 +23,6 @@ DECODER_LAYERS = 6
 PAD_IDX = 0
 CLIP_GRAD = 1.0
 
-# Device
 if torch.backends.mps.is_available():
     device = torch.device("mps")
 elif torch.cuda.is_available():
