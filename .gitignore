@@ -85,3 +85,6 @@ temp/
 
 # article
 article/
+
+# wandb
+wandb/
