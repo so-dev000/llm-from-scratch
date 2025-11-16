@@ -13,6 +13,7 @@ class Transformer(nn.Module):
         self.positional_encoding = PositionalEncoding(model_dim)
         self.encoder = Encoder(model_dim, encoder_num)
         self.decoder = Decoder(model_dim, decoder_num)
+        self.decoder_proj = nn.Linear(model_dim, vocab_size)
 
     def forward(self, source_tokens, target_tokens):
         # (batch_size, source_len, model_dim)
@@ -24,4 +25,5 @@ class Transformer(nn.Module):
 
         encoder_out = self.encoder(source_embed)
         decoder_out = self.decoder(target_embed, encoder_out)
-        return decoder_out
+        output = self.decoder_proj(decoder_out)
+        return output

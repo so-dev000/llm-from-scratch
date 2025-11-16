@@ -22,4 +22,4 @@ class TestTransformer:
         decoder_inputs = torch.randint(0, vocab_size, (batch_size, seq_len))
         output = transformer(encoder_inputs, decoder_inputs)
 
-        assert output.shape == (batch_size, seq_len, model_dim)
+        assert output.shape == (batch_size, seq_len, vocab_size)
