@@ -10,12 +10,21 @@ dependencies = [
     "matplotlib>=3.10.7",
     "python-dotenv>=1.2.1",
     "regex>=2025.11.3",
-    "torch>=2.9.0",
+    "torch>=2.5.0",
     "torchinfo>=1.8.0",
-    "torchvision>=0.24.0",
+    "torchvision>=0.20.0",
     "tqdm>=4.67.1",
     "wandb>=0.23.0",
 ]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }
+torchvision = { index = "pytorch-cu124" }
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
 
 [dependency-groups]
 dev = [
