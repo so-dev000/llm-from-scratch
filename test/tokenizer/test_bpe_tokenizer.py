@@ -1,4 +1,4 @@
-from component.bpe_tokenizer import BPETokenizer
+from tokenizer.bpe_tokenizer import BPETokenizer
 
 
 class TestBPETokenizer:
