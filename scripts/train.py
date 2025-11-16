@@ -14,8 +14,8 @@ from utils.collate import collate
 from utils.masking import combine_masks, create_causal_mask
 
 BATCH_SIZE = 64
-LEARNING_RATE = 3e-5
-NUM_EPOCHS = 10
+LEARNING_RATE = 1e-4
+NUM_EPOCHS = 100
 MAX_LENGTH = 128
 MODEL_DIM = 512
 ENCODER_LAYERS = 6
