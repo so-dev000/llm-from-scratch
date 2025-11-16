@@ -1,7 +1,7 @@
 import regex
 
 
-class BPETokenizer:
+class BPE:
     def __init__(self, pattern=None):
         self.merges = {}  # (int, int) -> int
         self.vocab = {}  # int -> bytes
