@@ -17,5 +17,5 @@
 - [Byte-Pair Encoding tokenization](https://huggingface.co/learn/llm-course/chapter6/5)
 
 - [Let's build the GPT Tokenizer](https://www.youtube.com/watch?v=zduSFxRajkE)
-  w
+
 - [Tiktokenizer](https://tiktokenizer.vercel.app/?model=gpt2)
