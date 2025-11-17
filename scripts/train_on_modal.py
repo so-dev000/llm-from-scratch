@@ -39,7 +39,7 @@ image = (
     )
 )
 
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 LEARNING_RATE = 1e-4
 NUM_EPOCHS = 50
 MAX_LENGTH = 128
