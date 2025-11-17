@@ -7,6 +7,15 @@ cp .env.example .env
 # Edit .env:
 # - HF_REPO_ID: your-username/repo-name
 # - HF_TOKEN: get from https://huggingface.co/settings/tokens (with write permission)
+# - WANDB_API_KEY: get from https://wandb.ai/settings#api
+```
+
+### Modal Setup
+
+```bash
+# Setup Modal secrets
+modal secret create huggingface-secret HF_REPO_ID=your-username/repo-name HF_TOKEN=your-hf-token
+modal secret create wandb-secret WANDB_API_KEY=your-wandb-key
 ```
 
 ## Usage
@@ -14,11 +23,23 @@ cp .env.example .env
 ### Train
 
 ```bash
-# Train tokenizers
+# 1. Train tokenizers
 python -m scripts.train_tokenizers
 
-# Train model
+# 2. Upload tokenizers to Hugging Face Hub
+python -m scripts.hub push
+
+# 3a. Train model locally
 python -m scripts.train
+
+# 3b. Train on Modal
+# (downloads tokenizers, uploads trained model automatically)
+
+# run training in background (can close terminal/sleep)
+modal run -d scripts/train_on_modal.py::train
+
+# Check running task
+modal app list
 ```
 
 ### Translate
@@ -30,10 +51,10 @@ python -m scripts.translate
 ### Hugging Face Hub
 
 ```bash
-# Upload checkpoints
+# Upload entire checkpoints folder
 python -m scripts.hub push
 
-# Download checkpoints
+# Download entire checkpoints folder
 python -m scripts.hub pull
 ```
 

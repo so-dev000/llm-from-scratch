@@ -4,7 +4,7 @@ import sys
 
 from dotenv import load_dotenv
 
-from utils.hf_hub import download_checkpoints, upload_checkpoints
+from utils.hf_hub import download, upload
 
 load_dotenv()
 
@@ -22,11 +22,20 @@ def cmd_push():
         print("Train model first: python -m scripts.train")
         return 1
 
-    success = upload_checkpoints("checkpoints", repo_id, token, private=True)
-    if success:
-        print(f"\nView at: https://huggingface.co/{repo_id}")
-        return 0
-    return 1
+    try:
+        success = upload(
+            local_dir="checkpoints",
+            repo_id=repo_id,
+            token=token,
+            private=True,
+        )
+        if success:
+            print(f"\nView at: https://huggingface.co/{repo_id}")
+            return 0
+        return 1
+    except Exception as e:
+        print(f"\nUpload failed: {e}")
+        return 1
 
 
 def cmd_pull():
@@ -38,7 +47,12 @@ def cmd_pull():
         return 1
 
     try:
-        download_checkpoints(repo_id, token)
+        download(
+            repo_id=repo_id,
+            token=token,
+            local_dir=".",
+            allow_patterns=["checkpoints/**"],
+        )
         return 0
     except Exception as e:
         print(f"\nDownload failed: {e}")

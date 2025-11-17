@@ -1,6 +1,7 @@
 import os
 import pickle
 
+import modal
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -8,11 +9,35 @@ from torchinfo import summary
 from tqdm import tqdm
 
 import wandb
-from data.translation_dataset import TranslationDataset
-from datasets import load_dataset
-from model.transformer import Transformer
-from utils.collate import collate
-from utils.masking import combine_masks, create_causal_mask
+
+app = modal.App("llm-training")
+
+PROJECT_DIR = "/Users/nsota/llm-from-scratch"
+
+# Only include necessary Python package directories
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install(
+        "torch",
+        "torchinfo",
+        "tqdm",
+        "wandb",
+        "datasets",
+        "transformers",
+        "huggingface-hub",
+    )
+    .add_local_dir(f"{PROJECT_DIR}/model", remote_path="/root/llm-from-scratch/model")
+    .add_local_dir(f"{PROJECT_DIR}/data", remote_path="/root/llm-from-scratch/data")
+    .add_local_dir(f"{PROJECT_DIR}/utils", remote_path="/root/llm-from-scratch/utils")
+    .add_local_dir(f"{PROJECT_DIR}/block", remote_path="/root/llm-from-scratch/block")
+    .add_local_dir(f"{PROJECT_DIR}/layer", remote_path="/root/llm-from-scratch/layer")
+    .add_local_dir(
+        f"{PROJECT_DIR}/component", remote_path="/root/llm-from-scratch/component"
+    )
+    .add_local_dir(
+        f"{PROJECT_DIR}/tokenizer", remote_path="/root/llm-from-scratch/tokenizer"
+    )
+)
 
 BATCH_SIZE = 64
 LEARNING_RATE = 1e-4
@@ -24,15 +49,10 @@ DECODER_LAYERS = 6
 PAD_IDX = 0
 CLIP_GRAD = 1.0
 
-if torch.backends.mps.is_available():
-    device = torch.device("mps")
-elif torch.cuda.is_available():
-    device = torch.device("cuda")
-else:
-    device = torch.device("cpu")
 
-
-def train_epoch(model, loader, optimizer, criterion, device):
+def train_epoch(
+    model, loader, optimizer, criterion, device, create_causal_mask, combine_masks
+):
     model.train()
     total_loss = 0
 
@@ -85,7 +105,7 @@ def train_epoch(model, loader, optimizer, criterion, device):
     return total_loss / len(loader)
 
 
-def evaluate(model, loader, criterion, device):
+def evaluate(model, loader, criterion, device, create_causal_mask, combine_masks):
     model.eval()
     total_loss = 0
 
@@ -123,7 +143,32 @@ def evaluate(model, loader, criterion, device):
     return total_loss / len(loader)
 
 
-def main():
+@app.function(
+    image=image,
+    gpu="L4",
+    timeout=3600,  # 1hour
+    secrets=[
+        modal.Secret.from_name("huggingface-secret"),
+        modal.Secret.from_name("wandb-secret"),
+    ],
+)
+def train():
+    import sys
+
+    sys.path.insert(0, "/root/llm-from-scratch")
+
+    # Import local modules
+    from data.translation_dataset import TranslationDataset
+    from datasets import load_dataset
+    from model.transformer import Transformer
+    from utils.collate import collate
+    from utils.hf_hub import download, upload
+    from utils.masking import combine_masks, create_causal_mask
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Running on Modal with device: {device}")
+
+    # Initialize wandb
     wandb.init(
         project="llm-from-scratch",
         config={
@@ -137,12 +182,33 @@ def main():
         },
     )
 
-    # Load tokenizers
-    print("Loading tokenizers...")
-    with open("checkpoints/tokenizers/bsd_ja_en/en_bpe.pkl", "rb") as f:
+    # Load tokenizers from Hugging Face Hub
+    print("Loading tokenizers from Hugging Face Hub...")
+
+    hf_repo_id = os.environ.get("HF_REPO_ID")
+    if not hf_repo_id:
+        raise ValueError("HF_REPO_ID environment variable must be set")
+
+    print(f"Downloading tokenizers from {hf_repo_id}...")
+
+    en_tokenizer_path = "checkpoints/tokenizers/bsd_ja_en/en_bpe.pkl"
+    ja_tokenizer_path = "checkpoints/tokenizers/bsd_ja_en/ja_bpe.pkl"
+
+    download(
+        repo_id=hf_repo_id,
+        allow_patterns=[en_tokenizer_path, ja_tokenizer_path],
+        token=os.environ.get("HF_TOKEN"),
+        repo_type="model",
+        local_dir=".",
+        confirm=False,
+    )
+
+    print("Tokenizers downloaded successfully!")
+
+    with open(en_tokenizer_path, "rb") as f:
         en_tokenizer = pickle.load(f)
 
-    with open("checkpoints/tokenizers/bsd_ja_en/ja_bpe.pkl", "rb") as f:
+    with open(ja_tokenizer_path, "rb") as f:
         ja_tokenizer = pickle.load(f)
 
     # Use max vocab size
@@ -151,7 +217,7 @@ def main():
 
     # Load dataset
     print("Loading dataset...")
-    dataset = load_dataset("ryo0634/bsd_ja_en", cache_dir="./datasets")
+    dataset = load_dataset("ryo0634/bsd_ja_en")
 
     # Create datasets
     train_dataset = TranslationDataset(
@@ -198,16 +264,28 @@ def main():
     # Training loop
     best_val_loss = float("inf")
 
+    print(f"Using Hugging Face repo: {hf_repo_id}")
+
     for epoch in range(NUM_EPOCHS):
         print(f"\nEpoch {epoch + 1}/{NUM_EPOCHS}")
         print("-" * 50)
 
         # Train
-        train_loss = train_epoch(model, train_loader, optimizer, criterion, device)
+        train_loss = train_epoch(
+            model,
+            train_loader,
+            optimizer,
+            criterion,
+            device,
+            create_causal_mask,
+            combine_masks,
+        )
         print(f"Training Loss: {train_loss:.4f}")
 
         # Evaluate
-        val_loss = evaluate(model, val_loader, criterion, device)
+        val_loss = evaluate(
+            model, val_loader, criterion, device, create_causal_mask, combine_masks
+        )
         print(f"Validation Loss: {val_loss:.4f}")
 
         wandb.log(
@@ -218,10 +296,13 @@ def main():
             }
         )
 
-        # Save best model
+        # Save and upload best model to Hugging Face Hub
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            os.makedirs("checkpoints/models", exist_ok=True)
+
+            # Save model locally first
+            checkpoint_path = "/tmp/checkpoints/models/best_model.pt"
+            os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
             torch.save(
                 {
                     "epoch": epoch,
@@ -229,13 +310,32 @@ def main():
                     "optimizer_state_dict": optimizer.state_dict(),
                     "train_loss": train_loss,
                     "val_loss": val_loss,
+                    "vocab_size": vocab_size,
+                    "model_dim": MODEL_DIM,
+                    "encoder_layers": ENCODER_LAYERS,
+                    "decoder_layers": DECODER_LAYERS,
                 },
-                "checkpoints/models/best_model.pt",
+                checkpoint_path,
             )
             print(f"Best model saved (val_loss: {val_loss:.4f})")
+
+            # Upload to Hugging Face Hub
+            try:
+                upload(
+                    local_dir="/tmp/checkpoints/models",
+                    repo_id=hf_repo_id,
+                    token=os.environ.get("HF_TOKEN"),
+                    private=True,
+                    repo_type="model",
+                    path_in_repo="checkpoints/models",
+                )
+                print(f"Model uploaded to Hugging Face Hub: {hf_repo_id}")
+            except Exception as e:
+                print(f"Error uploading to Hugging Face Hub: {e}")
 
     wandb.finish()
 
 
-if __name__ == "__main__":
-    main()
+@app.local_entrypoint()
+def main():
+    train.remote()
