@@ -41,7 +41,7 @@ image = (
 
 BATCH_SIZE = 64
 LEARNING_RATE = 1e-4
-NUM_EPOCHS = 100
+NUM_EPOCHS = 50
 MAX_LENGTH = 128
 MODEL_DIM = 512
 ENCODER_LAYERS = 6
@@ -146,7 +146,7 @@ def evaluate(model, loader, criterion, device, create_causal_mask, combine_masks
 @app.function(
     image=image,
     gpu="L4",
-    timeout=3600,  # 1hour
+    timeout=10800,  # 3hour
     secrets=[
         modal.Secret.from_name("huggingface-secret"),
         modal.Secret.from_name("wandb-secret"),
