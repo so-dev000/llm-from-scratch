@@ -1,6 +1,8 @@
 import os
 import pickle
+from datetime import datetime
 
+import modal
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -8,31 +10,46 @@ from torchinfo import summary
 from tqdm import tqdm
 
 import wandb
-from data.translation_dataset import TranslationDataset
-from datasets import load_dataset
-from model.transformer import Transformer
-from utils.collate import collate
-from utils.masking import combine_masks, create_causal_mask
 
-BATCH_SIZE = 64
+app = modal.App("llm-training")
+
+PROJECT_DIR = "/Users/nsota/llm-from-scratch"
+
+data_volume = modal.Volume.from_name("llm-data", create_if_missing=True)
+checkpoint_volume = modal.Volume.from_name("llm-checkpoints", create_if_missing=True)
+
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("torch", "torchinfo", "tqdm", "wandb", "datasets")
+    .add_local_dir(f"{PROJECT_DIR}/model", remote_path="/root/llm-from-scratch/model")
+    .add_local_dir(f"{PROJECT_DIR}/data", remote_path="/root/llm-from-scratch/data")
+    .add_local_dir(f"{PROJECT_DIR}/utils", remote_path="/root/llm-from-scratch/utils")
+    .add_local_dir(f"{PROJECT_DIR}/block", remote_path="/root/llm-from-scratch/block")
+    .add_local_dir(f"{PROJECT_DIR}/layer", remote_path="/root/llm-from-scratch/layer")
+    .add_local_dir(
+        f"{PROJECT_DIR}/component", remote_path="/root/llm-from-scratch/component"
+    )
+    .add_local_dir(
+        f"{PROJECT_DIR}/tokenizer", remote_path="/root/llm-from-scratch/tokenizer"
+    )
+)
+
+DATASET_NAME = "Verah/JParaCrawl-Filtered-English-Japanese-Parallel-Corpus"
+
+BATCH_SIZE = 128
 LEARNING_RATE = 1e-4
-NUM_EPOCHS = 100
-MAX_LENGTH = 128
+NUM_EPOCHS = 10
+MAX_LENGTH = 64
 MODEL_DIM = 512
 ENCODER_LAYERS = 6
 DECODER_LAYERS = 6
 PAD_IDX = 0
 CLIP_GRAD = 1.0
 
-if torch.backends.mps.is_available():
-    device = torch.device("mps")
-elif torch.cuda.is_available():
-    device = torch.device("cuda")
-else:
-    device = torch.device("cpu")
 
-
-def train_epoch(model, loader, optimizer, criterion, device):
+def train_epoch(
+    model, loader, optimizer, criterion, device, create_causal_mask, combine_masks
+):
     model.train()
     total_loss = 0
 
@@ -42,23 +59,16 @@ def train_epoch(model, loader, optimizer, criterion, device):
         src_mask = batch["src_mask"].to(device)
         tgt_mask = batch["tgt_mask"].to(device)
 
-        # Expand src_mask for encoder self-attention:
-        # (batch, src_len) -> (batch, src_len, src_len)
         src_mask_expanded = src_mask.unsqueeze(1) & src_mask.unsqueeze(2)
 
-        # Create causal mask for target
         tgt_len = tgt.size(1)
         causal_mask = create_causal_mask(tgt_len, device=device)
         tgt_combined_mask = combine_masks(tgt_mask, causal_mask)
 
-        # shift target sequence
         tgt_input = tgt[:, :-1]
         tgt_output = tgt[:, 1:]
-
-        # Adjust mask size to match tgt_input
         tgt_input_mask = tgt_combined_mask[:, :-1, :-1]
 
-        # Forward pass
         output = model(
             src,
             tgt_input,
@@ -67,13 +77,10 @@ def train_epoch(model, loader, optimizer, criterion, device):
             tgt_mask=tgt_input_mask,
         )
 
-        # Calculate loss
         output = output.reshape(-1, output.size(-1))
         tgt_output = tgt_output.reshape(-1)
-
         loss = criterion(output, tgt_output)
 
-        # Backward pass
         optimizer.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), CLIP_GRAD)
@@ -85,7 +92,7 @@ def train_epoch(model, loader, optimizer, criterion, device):
     return total_loss / len(loader)
 
 
-def evaluate(model, loader, criterion, device):
+def evaluate(model, loader, criterion, device, create_causal_mask, combine_masks):
     model.eval()
     total_loss = 0
 
@@ -116,16 +123,37 @@ def evaluate(model, loader, criterion, device):
 
             output = output.reshape(-1, output.size(-1))
             tgt_output = tgt_output.reshape(-1)
-
             loss = criterion(output, tgt_output)
             total_loss += loss.item()
 
     return total_loss / len(loader)
 
 
-def main():
+@app.function(
+    image=image,
+    gpu="L4",
+    volumes={"/data": data_volume, "/checkpoints": checkpoint_volume},
+    timeout=10800,
+    secrets=[modal.Secret.from_name("wandb-secret")],
+)
+def train(run_name: str = None):
+    import sys
+
+    sys.path.insert(0, "/root/llm-from-scratch")
+
+    from datasets import load_dataset
+    from model.transformer import Transformer
+    from utils.collate import collate
+    from utils.masking import combine_masks, create_causal_mask
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if run_name is None:
+        run_name = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     wandb.init(
         project="llm-from-scratch",
+        name=run_name,
         config={
             "learning_rate": LEARNING_RATE,
             "epochs": NUM_EPOCHS,
@@ -134,41 +162,73 @@ def main():
             "model_dim": MODEL_DIM,
             "encoder_layers": ENCODER_LAYERS,
             "decoder_layers": DECODER_LAYERS,
+            "dataset": DATASET_NAME,
         },
     )
 
-    # Load tokenizers
-    print("Loading tokenizers...")
-    with open("checkpoints/tokenizers/bsd_ja_en/en_bpe.pkl", "rb") as f:
+    tokenizer_dir = "/data/tokenizers/jparacrawl"
+    en_tokenizer_path = f"{tokenizer_dir}/en_bpe.pkl"
+    ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.pkl"
+
+    if not os.path.exists(en_tokenizer_path) or not os.path.exists(ja_tokenizer_path):
+        raise FileNotFoundError("Tokenizers not found. Run scripts/prepare.py first")
+
+    with open(en_tokenizer_path, "rb") as f:
         en_tokenizer = pickle.load(f)
 
-    with open("checkpoints/tokenizers/bsd_ja_en/ja_bpe.pkl", "rb") as f:
+    with open(ja_tokenizer_path, "rb") as f:
         ja_tokenizer = pickle.load(f)
 
-    # Use max vocab size
     vocab_size = max(len(en_tokenizer.vocab), len(ja_tokenizer.vocab))
-    print(f"Vocab size: {vocab_size}")
 
-    # Load dataset
-    print("Loading dataset...")
-    dataset = load_dataset("ryo0634/bsd_ja_en", cache_dir="./datasets")
+    dataset = load_dataset(DATASET_NAME, split="train")
+    train_test = dataset.train_test_split(test_size=0.05, seed=42)
 
-    # Create datasets
-    train_dataset = TranslationDataset(
-        data=dataset["train"],
+    class JParaCrawlDataset:
+        def __init__(self, data, en_tokenizer, ja_tokenizer, max_length):
+            self.data = data
+            self.en_tokenizer = en_tokenizer
+            self.ja_tokenizer = ja_tokenizer
+            self.max_length = max_length
+
+        def __len__(self):
+            return len(self.data)
+
+        def __getitem__(self, idx):
+            item = self.data[idx]
+            en_text = item["english"]
+            ja_text = item["japanese"]
+
+            src_ids = self.en_tokenizer.encode(en_text, add_special_tokens=True)
+            tgt_ids = self.ja_tokenizer.encode(ja_text, add_special_tokens=True)
+
+            src_ids = src_ids[: self.max_length]
+            tgt_ids = tgt_ids[: self.max_length]
+
+            src_tensor = torch.tensor(src_ids, dtype=torch.long)
+            tgt_tensor = torch.tensor(tgt_ids, dtype=torch.long)
+
+            return {
+                "src": src_tensor,
+                "tgt": tgt_tensor,
+                "src_text": en_text,
+                "tgt_text": ja_text,
+            }
+
+    train_dataset = JParaCrawlDataset(
+        data=train_test["train"],
         en_tokenizer=en_tokenizer,
         ja_tokenizer=ja_tokenizer,
         max_length=MAX_LENGTH,
     )
 
-    val_dataset = TranslationDataset(
-        data=dataset["validation"],
+    val_dataset = JParaCrawlDataset(
+        data=train_test["test"],
         en_tokenizer=en_tokenizer,
         ja_tokenizer=ja_tokenizer,
         max_length=MAX_LENGTH,
     )
 
-    # Create dataloaders
     train_loader = DataLoader(
         train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate
     )
@@ -177,11 +237,6 @@ def main():
         val_dataset, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate
     )
 
-    print(f"Training samples: {len(train_dataset)}")
-    print(f"Validation samples: {len(val_dataset)}")
-
-    # Initialize model
-    print(f"Initializing model on {device}...")
     model = Transformer(
         vocab_size=vocab_size,
         model_dim=MODEL_DIM,
@@ -191,37 +246,51 @@ def main():
 
     summary(model)
 
-    # Optimizer and loss
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
     criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
 
-    # Training loop
     best_val_loss = float("inf")
+    run_checkpoint_dir = f"/checkpoints/runs/{run_name}"
+    os.makedirs(run_checkpoint_dir, exist_ok=True)
 
     for epoch in range(NUM_EPOCHS):
         print(f"\nEpoch {epoch + 1}/{NUM_EPOCHS}")
-        print("-" * 50)
 
-        # Train
-        train_loss = train_epoch(model, train_loader, optimizer, criterion, device)
-        print(f"Training Loss: {train_loss:.4f}")
-
-        # Evaluate
-        val_loss = evaluate(model, val_loader, criterion, device)
-        print(f"Validation Loss: {val_loss:.4f}")
-
-        wandb.log(
-            {
-                "epoch": epoch + 1,
-                "train_loss": train_loss,
-                "val_loss": val_loss,
-            }
+        train_loss = train_epoch(
+            model,
+            train_loader,
+            optimizer,
+            criterion,
+            device,
+            create_causal_mask,
+            combine_masks,
         )
 
-        # Save best model
+        val_loss = evaluate(
+            model, val_loader, criterion, device, create_causal_mask, combine_masks
+        )
+
+        print(f"Train: {train_loss:.4f}, Val: {val_loss:.4f}")
+
+        wandb.log({"epoch": epoch + 1, "train_loss": train_loss, "val_loss": val_loss})
+
+        torch.save(
+            {
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "train_loss": train_loss,
+                "val_loss": val_loss,
+                "vocab_size": vocab_size,
+                "model_dim": MODEL_DIM,
+                "encoder_layers": ENCODER_LAYERS,
+                "decoder_layers": DECODER_LAYERS,
+            },
+            f"{run_checkpoint_dir}/checkpoint_epoch_{epoch + 1}.pt",
+        )
+
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            os.makedirs("checkpoints/models", exist_ok=True)
             torch.save(
                 {
                     "epoch": epoch,
@@ -229,13 +298,19 @@ def main():
                     "optimizer_state_dict": optimizer.state_dict(),
                     "train_loss": train_loss,
                     "val_loss": val_loss,
+                    "vocab_size": vocab_size,
+                    "model_dim": MODEL_DIM,
+                    "encoder_layers": ENCODER_LAYERS,
+                    "decoder_layers": DECODER_LAYERS,
                 },
-                "checkpoints/models/best_model.pt",
+                f"{run_checkpoint_dir}/best_model.pt",
             )
-            print(f"Best model saved (val_loss: {val_loss:.4f})")
+
+        checkpoint_volume.commit()
 
     wandb.finish()
 
 
-if __name__ == "__main__":
-    main()
+@app.local_entrypoint()
+def main(run_name: str = None):
+    train.remote(run_name=run_name)

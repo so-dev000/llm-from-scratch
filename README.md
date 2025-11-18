@@ -4,58 +4,59 @@
 
 ```bash
 cp .env.example .env
-# Edit .env:
-# - HF_REPO_ID: your-username/repo-name
-# - HF_TOKEN: get from https://huggingface.co/settings/tokens (with write permission)
-# - WANDB_API_KEY: get from https://wandb.ai/settings#api
-```
+# Edit .env and add: WANDB_API_KEY
 
-### Modal Setup
+# Install Modal
+pip install modal
+modal setup
 
-```bash
-# Setup Modal secrets
-modal secret create huggingface-secret HF_REPO_ID=your-username/repo-name HF_TOKEN=your-hf-token
+# Create Modal secret
 modal secret create wandb-secret WANDB_API_KEY=your-wandb-key
 ```
 
-## Usage
+## Workflow
 
-### Train
+### Prepare Data (Modal - First time only)
 
 ```bash
-# 1. Train tokenizers
-python -m scripts.train_tokenizers
+modal run -d scripts/prepare.py
+```
 
-# 2. Upload tokenizers to Hugging Face Hub
-python -m scripts.hub push
+### Train Model (Modal)
 
-# 3a. Train model locally
-python -m scripts.train
+```bash
+# Background training
+modal run -d scripts/train.py --run-name="experiment-1"
 
-# 3b. Train on Modal
-# (downloads tokenizers, uploads trained model automatically)
-
-# run training in background (can close terminal/sleep)
-modal run -d scripts/train_on_modal.py::train
-
-# Check running task
+# Check status
 modal app list
+modal app logs llm-training
 ```
 
-### Translate
+### Pull Trained Model (Local)
 
 ```bash
+# List available runs
+modal run scripts/pull.py --list-only=true
+
+# Pull specific run
+modal run scripts/pull.py --run-name="experiment-1"
+
+# Pull tokenizers only
+modal run scripts/pull.py
+```
+
+### Translate (Local)
+
+```bash
+# Use latest run
 python -m scripts.translate
-```
 
-### Hugging Face Hub
+# Use specific run
+python -m scripts.translate --run-name="experiment-1"
 
-```bash
-# Upload entire checkpoints folder
-python -m scripts.hub push
-
-# Download entire checkpoints folder
-python -m scripts.hub pull
+# Use specific checkpoint
+python -m scripts.translate --run-name="experiment-1" --checkpoint="checkpoint_epoch_10.pt"
 ```
 
 ## References

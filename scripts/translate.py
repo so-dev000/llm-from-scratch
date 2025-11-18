@@ -1,20 +1,24 @@
+import argparse
+import os
 import pickle
+from pathlib import Path
 
 import torch
 
 from model.transformer import Transformer
 from utils.masking import combine_masks, create_causal_mask
 
-# Hyperparameters (must match training)
-MAX_LENGTH = 128
+MAX_LENGTH = 64
 MODEL_DIM = 512
 ENCODER_LAYERS = 6
 DECODER_LAYERS = 6
 PAD_IDX = 0
-BOS_IDX = 2
-EOS_IDX = 3
+BOS_IDX = 1
+EOS_IDX = 2
 
-# Device
+TOKENIZER_DIR = "checkpoints/tokenizers/jparacrawl"
+CHECKPOINT_BASE_DIR = "checkpoints/runs"
+
 if torch.backends.mps.is_available():
     device = torch.device("mps")
 elif torch.cuda.is_available():
@@ -23,51 +27,46 @@ else:
     device = torch.device("cpu")
 
 
-def translate_sentence(
-    model,
-    sentence,
-    en_tokenizer,
-    ja_tokenizer,
-    max_length=MAX_LENGTH,
-    device=device,
-):
+def find_latest_run():
+    runs_path = Path(CHECKPOINT_BASE_DIR)
+    if not runs_path.exists():
+        return None
+
+    run_dirs = [d for d in runs_path.iterdir() if d.is_dir()]
+    if not run_dirs:
+        return None
+
+    return max(run_dirs, key=lambda d: d.stat().st_mtime).name
+
+
+def translate_sentence(model, sentence, en_tokenizer, ja_tokenizer):
     model.eval()
 
-    # Tokenize and prepare input
     src_ids = en_tokenizer.encode(sentence, add_special_tokens=True)
-    src_tensor = torch.tensor(src_ids, dtype=torch.long, device=device).unsqueeze(
-        0
-    )  # Add batch dimension
+    src_tensor = torch.tensor(src_ids, dtype=torch.long, device=device).unsqueeze(0)
 
-    # Create src_masks
     src_padding_mask = src_tensor != PAD_IDX
     encoder_src_mask = src_padding_mask.unsqueeze(1) & src_padding_mask.unsqueeze(2)
 
-    # Initialize target sequence with BOS token
     tgt_tensor = torch.tensor([[BOS_IDX]], dtype=torch.long, device=device)
 
-    for _ in range(max_length):
-        # Create tgt_mask (causal mask + padding mask)
+    for _ in range(MAX_LENGTH):
         tgt_len = tgt_tensor.size(1)
         causal_mask = create_causal_mask(tgt_len, device=device)
         tgt_padding_mask = tgt_tensor != PAD_IDX
         tgt_combined_mask = combine_masks(tgt_padding_mask, causal_mask)
-        tgt_input_mask = tgt_combined_mask
 
-        # Forward pass
         with torch.no_grad():
             output = model(
                 src_tensor,
                 tgt_tensor,
                 encoder_src_mask=encoder_src_mask,
                 decoder_src_mask=src_padding_mask,
-                tgt_mask=tgt_input_mask,
+                tgt_mask=tgt_combined_mask,
             )
 
-        # Get the next token prediction
         pred_token_id = output.argmax(dim=-1)[:, -1].item()
 
-        # Append to target sequence
         tgt_tensor = torch.cat(
             [
                 tgt_tensor,
@@ -76,31 +75,42 @@ def translate_sentence(
             dim=1,
         )
 
-        # If EOS token is predicted, stop
         if pred_token_id == EOS_IDX:
             break
 
-    # Decode the generated sequence
-    translated_text = ja_tokenizer.decode(
-        tgt_tensor.squeeze(0).tolist(), skip_special_tokens=True
-    )
-    return translated_text
+    return ja_tokenizer.decode(tgt_tensor.squeeze(0).tolist(), skip_special_tokens=True)
 
 
 def main():
-    # Load tokenizers
-    print("Loading tokenizers...")
-    with open("checkpoints/tokenizers/bsd_ja_en/en_bpe.pkl", "rb") as f:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run-name", type=str, default=None)
+    parser.add_argument("--checkpoint", type=str, default="best_model.pt")
+    args = parser.parse_args()
+
+    if not os.path.exists(TOKENIZER_DIR):
+        print(f"Tokenizers not found at {TOKENIZER_DIR}")
+        print("Run: modal run scripts/pull.py")
+        return
+
+    with open(f"{TOKENIZER_DIR}/en_bpe.pkl", "rb") as f:
         en_tokenizer = pickle.load(f)
 
-    with open("checkpoints/tokenizers/bsd_ja_en/ja_bpe.pkl", "rb") as f:
+    with open(f"{TOKENIZER_DIR}/ja_bpe.pkl", "rb") as f:
         ja_tokenizer = pickle.load(f)
 
-    # Use max vocab size
+    run_name = args.run_name or find_latest_run()
+    if not run_name:
+        print("No training runs found")
+        print("Run: modal run scripts/pull.py --run-name=<run-name>")
+        return
+
+    checkpoint_path = Path(CHECKPOINT_BASE_DIR) / run_name / args.checkpoint
+    if not checkpoint_path.exists():
+        print(f"Checkpoint not found: {checkpoint_path}")
+        return
+
     vocab_size = max(len(en_tokenizer.vocab), len(ja_tokenizer.vocab))
 
-    # Initialize model
-    print(f"Initializing model on {device}...")
     model = Transformer(
         vocab_size=vocab_size,
         model_dim=MODEL_DIM,
@@ -108,31 +118,29 @@ def main():
         decoder_num=DECODER_LAYERS,
     ).to(device)
 
-    # Load trained model weights
-    print("Loading model weights...")
-    model_path = "checkpoints/models/best_model.pt"
-    if not os.path.exists(model_path):
-        print(f"Error: Model weights not found at {model_path}")
-        print("Please train the model first using 'python -m scripts.train'")
-        return
-
-    checkpoint = torch.load(model_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
 
-    print("Model loaded. Enter English sentences to translate (type 'exit' to quit):")
+    print(f"Model loaded: {run_name}/{args.checkpoint}")
+    print(
+        f"Epoch: {checkpoint.get('epoch', '?')},"
+        f"Val loss: {checkpoint.get('val_loss', '?'):.4f}\n"
+    )
 
     while True:
-        english_sentence = input("English: ")
-        if english_sentence.lower() == "exit":
-            break
+        try:
+            en = input("EN: ").strip()
+            if en.lower() in ["exit", "quit", "q"]:
+                break
+            if not en:
+                continue
 
-        japanese_translation = translate_sentence(
-            model, english_sentence, en_tokenizer, ja_tokenizer, device=device
-        )
-        print(f"Japanese: {japanese_translation}")
+            ja = translate_sentence(model, en, en_tokenizer, ja_tokenizer)
+            print(f"JA: {ja}\n")
+
+        except KeyboardInterrupt:
+            break
 
 
 if __name__ == "__main__":
-    import os
-
     main()
