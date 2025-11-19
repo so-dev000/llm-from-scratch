@@ -32,7 +32,7 @@ SPECIAL_TOKENS = {
     volumes={"/data": data_volume},
     timeout=1200,
     cpu=8,
-    memory=16384,  # 16GB in MB
+    memory=16384,
 )
 def prepare_data():
     import sys
@@ -47,7 +47,6 @@ def prepare_data():
     ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.pkl"
 
     if os.path.exists(en_tokenizer_path) and os.path.exists(ja_tokenizer_path):
-        print(f"Tokenizers already exist at {tokenizer_dir}")
         return
 
     dataset = load_dataset(DATASET_NAME, split="train")
@@ -70,7 +69,6 @@ def prepare_data():
         pickle.dump(ja_tokenizer, f)
 
     data_volume.commit()
-    print(f"Saved to {tokenizer_dir}")
 
 
 @app.local_entrypoint()

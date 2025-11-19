@@ -89,7 +89,6 @@ def main():
 
     if not os.path.exists(TOKENIZER_DIR):
         print(f"Tokenizers not found at {TOKENIZER_DIR}")
-        print("Run: modal run scripts/pull.py")
         return
 
     with open(f"{TOKENIZER_DIR}/en_bpe.pkl", "rb") as f:
@@ -101,7 +100,6 @@ def main():
     run_name = args.run_name or find_latest_run()
     if not run_name:
         print("No training runs found")
-        print("Run: modal run scripts/pull.py --run-name=<run-name>")
         return
 
     checkpoint_path = Path(CHECKPOINT_BASE_DIR) / run_name / args.checkpoint
@@ -120,12 +118,6 @@ def main():
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
-
-    print(f"Model loaded: {run_name}/{args.checkpoint}")
-    print(
-        f"Epoch: {checkpoint.get('epoch', '?')},"
-        f"Val loss: {checkpoint.get('val_loss', '?'):.4f}\n"
-    )
 
     while True:
         try:

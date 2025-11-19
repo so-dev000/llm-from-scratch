@@ -5,11 +5,10 @@ from datetime import datetime
 import modal
 import torch
 import torch.nn as nn
+import wandb
 from torch.utils.data import DataLoader
 from torchinfo import summary
 from tqdm import tqdm
-
-import wandb
 
 app = modal.App("llm-training")
 
@@ -254,8 +253,6 @@ def train(run_name: str = None):
     os.makedirs(run_checkpoint_dir, exist_ok=True)
 
     for epoch in range(NUM_EPOCHS):
-        print(f"\nEpoch {epoch + 1}/{NUM_EPOCHS}")
-
         train_loss = train_epoch(
             model,
             train_loader,
@@ -270,24 +267,7 @@ def train(run_name: str = None):
             model, val_loader, criterion, device, create_causal_mask, combine_masks
         )
 
-        print(f"Train: {train_loss:.4f}, Val: {val_loss:.4f}")
-
         wandb.log({"epoch": epoch + 1, "train_loss": train_loss, "val_loss": val_loss})
-
-        torch.save(
-            {
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "train_loss": train_loss,
-                "val_loss": val_loss,
-                "vocab_size": vocab_size,
-                "model_dim": MODEL_DIM,
-                "encoder_layers": ENCODER_LAYERS,
-                "decoder_layers": DECODER_LAYERS,
-            },
-            f"{run_checkpoint_dir}/checkpoint_epoch_{epoch + 1}.pt",
-        )
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
