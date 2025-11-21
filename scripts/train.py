@@ -14,8 +14,7 @@ app = modal.App("llm-training")
 
 PROJECT_DIR = "/Users/nsota/llm-from-scratch"
 
-data_volume = modal.Volume.from_name("llm-data", create_if_missing=True)
-checkpoint_volume = modal.Volume.from_name("llm-checkpoints", create_if_missing=True)
+volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -33,9 +32,9 @@ image = (
     )
 )
 
-DATASET_NAME = "Verah/JParaCrawl-Filtered-English-Japanese-Parallel-Corpus"
+DATASET_NAME = "ryo0634/bsd_ja_en"
 
-BATCH_SIZE = 128
+BATCH_SIZE = 600
 LEARNING_RATE = 1e-4
 NUM_EPOCHS = 10
 MAX_LENGTH = 64
@@ -130,9 +129,9 @@ def evaluate(model, loader, criterion, device, create_causal_mask, combine_masks
 
 @app.function(
     image=image,
-    gpu="L4",
-    volumes={"/data": data_volume, "/checkpoints": checkpoint_volume},
-    timeout=10800,
+    gpu="L40S",
+    volumes={"/vol": volume},
+    timeout=3600 * 12,
     secrets=[modal.Secret.from_name("wandb-secret")],
 )
 def train(run_name: str = None):
@@ -165,7 +164,7 @@ def train(run_name: str = None):
         },
     )
 
-    tokenizer_dir = "/data/tokenizers/jparacrawl"
+    tokenizer_dir = "/vol/tokenizers/bsd_en_ja"
     en_tokenizer_path = f"{tokenizer_dir}/en_bpe.pkl"
     ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.pkl"
 
@@ -183,7 +182,7 @@ def train(run_name: str = None):
     dataset = load_dataset(DATASET_NAME, split="train")
     train_test = dataset.train_test_split(test_size=0.05, seed=42)
 
-    class JParaCrawlDataset:
+    class TranslationDataset:
         def __init__(self, data, en_tokenizer, ja_tokenizer, max_length):
             self.data = data
             self.en_tokenizer = en_tokenizer
@@ -195,8 +194,8 @@ def train(run_name: str = None):
 
         def __getitem__(self, idx):
             item = self.data[idx]
-            en_text = item["english"]
-            ja_text = item["japanese"]
+            en_text = item["en_sentence"]
+            ja_text = item["ja_sentence"]
 
             src_ids = self.en_tokenizer.encode(en_text, add_special_tokens=True)
             tgt_ids = self.ja_tokenizer.encode(ja_text, add_special_tokens=True)
@@ -214,14 +213,14 @@ def train(run_name: str = None):
                 "tgt_text": ja_text,
             }
 
-    train_dataset = JParaCrawlDataset(
+    train_dataset = TranslationDataset(
         data=train_test["train"],
         en_tokenizer=en_tokenizer,
         ja_tokenizer=ja_tokenizer,
         max_length=MAX_LENGTH,
     )
 
-    val_dataset = JParaCrawlDataset(
+    val_dataset = TranslationDataset(
         data=train_test["test"],
         en_tokenizer=en_tokenizer,
         ja_tokenizer=ja_tokenizer,
@@ -249,7 +248,7 @@ def train(run_name: str = None):
     criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
 
     best_val_loss = float("inf")
-    run_checkpoint_dir = f"/checkpoints/runs/{run_name}"
+    run_checkpoint_dir = f"/vol/runs/{run_name}"
     os.makedirs(run_checkpoint_dir, exist_ok=True)
 
     for epoch in range(NUM_EPOCHS):
@@ -265,6 +264,11 @@ def train(run_name: str = None):
 
         val_loss = evaluate(
             model, val_loader, criterion, device, create_causal_mask, combine_masks
+        )
+
+        print(
+            f"Epoch {epoch + 1}/{NUM_EPOCHS} - Train Loss: {train_loss:.4f}, "
+            f"Val Loss: {val_loss:.4f}"
         )
 
         wandb.log({"epoch": epoch + 1, "train_loss": train_loss, "val_loss": val_loss})
@@ -286,7 +290,7 @@ def train(run_name: str = None):
                 f"{run_checkpoint_dir}/best_model.pt",
             )
 
-        checkpoint_volume.commit()
+        volume.commit()
 
     wandb.finish()
 

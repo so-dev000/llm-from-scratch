@@ -4,18 +4,17 @@ import modal
 
 app = modal.App("llm-pull")
 
-data_volume = modal.Volume.from_name("llm-data", create_if_missing=True)
-checkpoint_volume = modal.Volume.from_name("llm-checkpoints", create_if_missing=True)
+volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
 
 image = modal.Image.debian_slim(python_version="3.11").pip_install("tqdm")
 
 
-@app.function(image=image, volumes={"/data": data_volume})
+@app.function(image=image, volumes={"/vol": volume})
 def pull_tokenizers():
     import tarfile
     from pathlib import Path
 
-    tokenizer_dir = Path("/data/tokenizers")
+    tokenizer_dir = Path("/vol/tokenizers")
     if not tokenizer_dir.exists():
         raise FileNotFoundError("No tokenizers found in Modal Volume")
 
@@ -28,11 +27,11 @@ def pull_tokenizers():
         return f.read()
 
 
-@app.function(image=image, volumes={"/checkpoints": checkpoint_volume})
+@app.function(image=image, volumes={"/vol": volume})
 def pull_best_model(run_name: str):
     from pathlib import Path
 
-    best_model_path = Path(f"/checkpoints/runs/{run_name}/best_model.pt")
+    best_model_path = Path(f"/vol/runs/{run_name}/best_model.pt")
     if not best_model_path.exists():
         raise FileNotFoundError(f"best_model.pt not found for run '{run_name}'")
 
@@ -40,11 +39,11 @@ def pull_best_model(run_name: str):
         return f.read()
 
 
-@app.function(image=image, volumes={"/checkpoints": checkpoint_volume})
+@app.function(image=image, volumes={"/vol": volume})
 def list_runs():
     from pathlib import Path
 
-    runs_dir = Path("/checkpoints/runs")
+    runs_dir = Path("/vol/runs")
     if not runs_dir.exists():
         return []
 
@@ -77,9 +76,7 @@ def main(run_name: str = None, list_only: bool = False, skip_tokenizers: bool = 
 
     from tqdm import tqdm
 
-    tokenizers_exist = Path("checkpoints/tokenizers").exists()
-
-    if not skip_tokenizers and not tokenizers_exist:
+    if not skip_tokenizers:
         tokenizers_data = pull_tokenizers.remote()
 
         tokenizers_path = "checkpoints/tokenizers.tar.gz"

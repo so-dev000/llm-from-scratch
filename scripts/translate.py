@@ -16,7 +16,7 @@ PAD_IDX = 0
 BOS_IDX = 1
 EOS_IDX = 2
 
-TOKENIZER_DIR = "checkpoints/tokenizers/jparacrawl"
+TOKENIZER_DIR = "checkpoints/tokenizers/bsd_en_ja"
 CHECKPOINT_BASE_DIR = "checkpoints/runs"
 
 if torch.backends.mps.is_available():
