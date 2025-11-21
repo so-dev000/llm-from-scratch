@@ -1,3 +1,5 @@
+from collections import Counter
+
 import regex
 from tqdm import tqdm
 
@@ -48,10 +50,9 @@ class BPE:
         num_merges = vocab_size - 256 - num_special
         for i in tqdm(range(num_merges), desc="Training BPE"):
             # collect stats from all chunks
-            stats = {}
+            stats = Counter()
             for ids in all_ids:
-                for pair, count in self._get_stats(ids).items():
-                    stats[pair] = stats.get(pair, 0) + count
+                stats.update(zip(ids, ids[1:]))
             if not stats:
                 break
             pair = max(stats, key=stats.get)
@@ -77,7 +78,7 @@ class BPE:
 
             # Apply learned merges to each chunk
             while len(chunk_tokens) >= 2:
-                stats = self._get_stats(chunk_tokens)
+                stats = set(zip(chunk_tokens, chunk_tokens[1:]))
                 pair = min(stats, key=lambda p: self.merges.get(p, float("inf")))
                 if pair not in self.merges:
                     break  # no merge available
