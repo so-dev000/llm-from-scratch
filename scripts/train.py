@@ -18,7 +18,7 @@ volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("torch", "torchinfo", "tqdm", "wandb", "datasets")
+    .pip_install("torch", "torchinfo", "tqdm", "wandb", "datasets", "regex")
     .add_local_dir(f"{PROJECT_DIR}/model", remote_path="/root/llm-from-scratch/model")
     .add_local_dir(f"{PROJECT_DIR}/data", remote_path="/root/llm-from-scratch/data")
     .add_local_dir(f"{PROJECT_DIR}/utils", remote_path="/root/llm-from-scratch/utils")
@@ -140,6 +140,7 @@ def train(run_name: str = None):
     sys.path.insert(0, "/root/llm-from-scratch")
 
     from datasets import load_dataset
+
     from model.transformer import Transformer
     from utils.collate import collate
     from utils.masking import combine_masks, create_causal_mask

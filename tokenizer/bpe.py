@@ -3,22 +3,23 @@ from tqdm import tqdm
 
 
 class BPE:
+    GPT2_PATTERN = (
+        r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?"
+        r"[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
+    )
+    DEFAULT_SPECIAL_TOKENS = {
+        "<PAD>": 0,  # padding
+        "<UNK>": 1,  # unknown
+        "<BOS>": 2,  # beginning of sentence
+        "<EOS>": 3,  # end of sentence
+    }
+
     def __init__(self, pattern=None, special_tokens=None):
         self.merges = {}  # (int, int) -> int
         self.vocab = {}  # int -> bytes
         # initialize special tokens
-        default_special_tokens = {
-            "<PAD>": 0,  # padding
-            "<UNK>": 1,  # unknown
-            "<BOS>": 2,  # beginning of sentence
-            "<EOS>": 3,  # end of sentence
-        }
-        self.special_tokens = special_tokens or default_special_tokens
-        gpt2_pattern = (
-            r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?"
-            r"[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
-        )
-        self.compiled_pattern = regex.compile(pattern or gpt2_pattern)
+        self.special_tokens = special_tokens or self.DEFAULT_SPECIAL_TOKENS.copy()
+        self.compiled_pattern = regex.compile(pattern or self.GPT2_PATTERN)
 
     def _split_text(self, text):
         return self.compiled_pattern.findall(text)
