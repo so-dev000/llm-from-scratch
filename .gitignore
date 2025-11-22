@@ -1,7 +1,6 @@
 # Data files
 datasets/
 checkpoints/
-data/
 
 # Virtual environments
 .venv/
@@ -88,3 +87,5 @@ temp/
 wandb/
 
 scripts/use_hf/
+
+data/

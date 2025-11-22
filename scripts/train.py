@@ -29,15 +29,16 @@ image = (
 
 DATASET_NAME = "Verah/JParaCrawl-Filtered-English-Japanese-Parallel-Corpus"
 
-BATCH_SIZE = 128
+BATCH_SIZE = 1024
 LEARNING_RATE = 1e-4
-NUM_EPOCHS = 50
-MAX_LENGTH = 64
+NUM_EPOCHS = 10
+MAX_LENGTH = 256
 MODEL_DIM = 512
-ENCODER_LAYERS = 4
-DECODER_LAYERS = 4
+ENCODER_LAYERS = 6
+DECODER_LAYERS = 6
 PAD_IDX = 0
 CLIP_GRAD = 1.0
+NUM_WORKERS = 4
 
 
 def train_epoch(
@@ -143,6 +144,8 @@ def train(run_name: str = None):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    torch.set_float32_matmul_precision("high")
+
     if run_name is None:
         run_name = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -222,11 +225,23 @@ def train(run_name: str = None):
     )
 
     train_loader = DataLoader(
-        train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        collate_fn=collate,
+        num_workers=4,
+        pin_memory=True,
+        persistent_workers=True,
     )
 
     val_loader = DataLoader(
-        val_dataset, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate
+        val_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        collate_fn=collate,
+        num_workers=4,
+        pin_memory=True,
+        persistent_workers=True,
     )
 
     model = Transformer(
@@ -235,6 +250,8 @@ def train(run_name: str = None):
         encoder_num=ENCODER_LAYERS,
         decoder_num=DECODER_LAYERS,
     ).to(device)
+
+    model = torch.compile(model, mode="reduce-overhead")
 
     summary(model)
 

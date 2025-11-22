@@ -16,6 +16,11 @@ VOCAB_SIZE = 8000
 SPECIAL_TOKENS = ["<PAD>", "<UNK>", "<BOS>", "<EOS>"]
 
 
+def batch_iterator(dataset, lang, batch_size=1000):
+    for i in range(0, len(dataset), batch_size):
+        yield dataset[i : i + batch_size][lang]
+
+
 def prepare_data_locally():
     from datasets import load_dataset
     from tokenizers import Regex, Tokenizer
@@ -32,10 +37,7 @@ def prepare_data_locally():
 
     dataset = load_dataset(DATASET_NAME, split="train")
 
-    en_texts = [item["english"] for item in dataset]
-    ja_texts = [item["japanese"] for item in dataset]
-
-    # GPT2-style pattern matching the custom tokenizer
+    # GPT2-style pattern matching
     gpt2_pattern = (
         r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?"
         r"[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
@@ -46,14 +48,16 @@ def prepare_data_locally():
         Regex(gpt2_pattern), behavior="isolated", invert=True
     )
     en_trainer = BpeTrainer(vocab_size=VOCAB_SIZE, special_tokens=SPECIAL_TOKENS)
-    en_tokenizer.train_from_iterator(en_texts, trainer=en_trainer)
+    en_tokenizer.train_from_iterator(
+        batch_iterator(dataset, "english"), trainer=en_trainer
+    )
 
     ja_tokenizer = Tokenizer(BPE(unk_token="<UNK>"))
-    ja_tokenizer.pre_tokenizer = Split(
-        Regex(gpt2_pattern), behavior="isolated", invert=True
-    )
+    # DO NOT SPLIT JAPANESE
     ja_trainer = BpeTrainer(vocab_size=VOCAB_SIZE, special_tokens=SPECIAL_TOKENS)
-    ja_tokenizer.train_from_iterator(ja_texts, trainer=ja_trainer)
+    ja_tokenizer.train_from_iterator(
+        batch_iterator(dataset, "japanese"), trainer=ja_trainer
+    )
 
     os.makedirs(tokenizer_dir, exist_ok=True)
 

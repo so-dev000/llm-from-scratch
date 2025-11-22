@@ -78,3 +78,4 @@ python -m scripts.translate --run-name="experiment-1" --checkpoint="checkpoint_e
 - [Byte-Pair Encoding tokenization](https://huggingface.co/learn/llm-course/chapter6/5)
 - [Let's build the GPT Tokenizer](https://www.youtube.com/watch?v=zduSFxRajkE)
 - [Tiktokenizer](https://tiktokenizer.vercel.app/?model=gpt2)
+- [How to generate text: using different decoding methods for language generation with Transformers] https://huggingface.co/blog/how-to-generate

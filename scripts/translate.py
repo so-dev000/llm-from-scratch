@@ -8,17 +8,17 @@ from tokenizers import Tokenizer
 from model.transformer import Transformer
 from utils.masking import combine_masks, create_causal_mask
 
-MAX_LENGTH = 64
+MAX_LENGTH = 256
 MODEL_DIM = 512
-ENCODER_LAYERS = 4
-DECODER_LAYERS = 4
+ENCODER_LAYERS = 6
+DECODER_LAYERS = 6
 PAD_IDX = 0
 UNK_IDX = 1
 BOS_IDX = 2
 EOS_IDX = 3
 
-TOKENIZER_DIR = "data/tokenizers/jparacrawl"
-CHECKPOINT_BASE_DIR = "data/runs"
+TOKENIZER_DIR = "checkpoints/tokenizers/jparacrawl"
+CHECKPOINT_BASE_DIR = "checkpoints/runs"
 
 if torch.backends.mps.is_available():
     device = torch.device("mps")
