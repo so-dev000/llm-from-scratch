@@ -40,10 +40,7 @@ modal app logs llm-training
 ### Pull Trained Model (Local)
 
 ```bash
-# List available runs
-modal run scripts/pull.py --list-only=true
-
-# Pull specific run
+# Pull tokenizers and specific run
 modal run scripts/pull.py --run-name="experiment-1"
 
 # Pull tokenizers only
@@ -78,4 +75,4 @@ python -m scripts.translate --run-name="experiment-1" --checkpoint="checkpoint_e
 - [Byte-Pair Encoding tokenization](https://huggingface.co/learn/llm-course/chapter6/5)
 - [Let's build the GPT Tokenizer](https://www.youtube.com/watch?v=zduSFxRajkE)
 - [Tiktokenizer](https://tiktokenizer.vercel.app/?model=gpt2)
-- [How to generate text: using different decoding methods for language generation with Transformers] https://huggingface.co/blog/how-to-generate
+- [Decoding Strategies in Large Language Models](https://huggingface.co/blog/mlabonne/decoding-strategies)
