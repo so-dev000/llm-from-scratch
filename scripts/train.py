@@ -18,6 +18,7 @@ volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("torch", "torchinfo", "tqdm", "wandb", "datasets", "tokenizers")
+    .env({"TOKENIZERS_PARALLELISM": "false"})
     .add_local_dir(f"{PROJECT_DIR}/model", remote_path="/root/llm-from-scratch/model")
     .add_local_dir(f"{PROJECT_DIR}/utils", remote_path="/root/llm-from-scratch/utils")
     .add_local_dir(f"{PROJECT_DIR}/block", remote_path="/root/llm-from-scratch/block")
@@ -29,16 +30,16 @@ image = (
 
 DATASET_NAME = "Verah/JParaCrawl-Filtered-English-Japanese-Parallel-Corpus"
 
-BATCH_SIZE = 1024
+BATCH_SIZE = 784
 LEARNING_RATE = 1e-4
 NUM_EPOCHS = 10
-MAX_LENGTH = 256
+MAX_LENGTH = 64
 MODEL_DIM = 512
 ENCODER_LAYERS = 6
 DECODER_LAYERS = 6
 PAD_IDX = 0
 CLIP_GRAD = 1.0
-NUM_WORKERS = 4
+NUM_WORKERS = 8
 
 
 def train_epoch(
@@ -179,69 +180,45 @@ def train(run_name: str = None):
     dataset = load_dataset(DATASET_NAME, split="train")
     train_test = dataset.train_test_split(test_size=0.05, seed=42)
 
-    class TranslationDataset:
-        def __init__(self, data, en_tokenizer, ja_tokenizer, max_length):
-            self.data = data
-            self.en_tokenizer = en_tokenizer
-            self.ja_tokenizer = ja_tokenizer
-            self.max_length = max_length
+    def preprocess_batch(batch):
+        src_encodings = en_tokenizer.encode_batch(batch["english"])
+        tgt_encodings = ja_tokenizer.encode_batch(batch["japanese"])
 
-        def __len__(self):
-            return len(self.data)
+        src_ids = [enc.ids[:MAX_LENGTH] for enc in src_encodings]
+        tgt_ids = [enc.ids[:MAX_LENGTH] for enc in tgt_encodings]
 
-        def __getitem__(self, idx):
-            item = self.data[idx]
-            en_text = item["english"]
-            ja_text = item["japanese"]
+        return {"src": src_ids, "tgt": tgt_ids}
 
-            src_encoding = self.en_tokenizer.encode(en_text)
-            tgt_encoding = self.ja_tokenizer.encode(ja_text)
-
-            src_ids = src_encoding.ids[: self.max_length]
-            tgt_ids = tgt_encoding.ids[: self.max_length]
-
-            src_tensor = torch.tensor(src_ids, dtype=torch.long)
-            tgt_tensor = torch.tensor(tgt_ids, dtype=torch.long)
-
-            return {
-                "src": src_tensor,
-                "tgt": tgt_tensor,
-                "src_text": en_text,
-                "tgt_text": ja_text,
-            }
-
-    train_dataset = TranslationDataset(
-        data=train_test["train"],
-        en_tokenizer=en_tokenizer,
-        ja_tokenizer=ja_tokenizer,
-        max_length=MAX_LENGTH,
+    tokenized_datasets = train_test.map(
+        preprocess_batch,
+        batched=True,
+        batch_size=1000,
+        remove_columns=train_test["train"].column_names,
+        desc="Tokenizing dataset",
     )
 
-    val_dataset = TranslationDataset(
-        data=train_test["test"],
-        en_tokenizer=en_tokenizer,
-        ja_tokenizer=ja_tokenizer,
-        max_length=MAX_LENGTH,
-    )
+    tokenized_datasets.set_format(type="torch", columns=["src", "tgt"])
 
     train_loader = DataLoader(
-        train_dataset,
+        tokenized_datasets["train"],
         batch_size=BATCH_SIZE,
         shuffle=True,
         collate_fn=collate,
-        num_workers=4,
+        num_workers=NUM_WORKERS,
         pin_memory=True,
         persistent_workers=True,
+        prefetch_factor=4,
     )
 
     val_loader = DataLoader(
-        val_dataset,
+        tokenized_datasets["test"],
         batch_size=BATCH_SIZE,
         shuffle=False,
         collate_fn=collate,
-        num_workers=4,
+        num_workers=NUM_WORKERS,
         pin_memory=True,
         persistent_workers=True,
+        prefetch_factor=4,
     )
 
     model = Transformer(
@@ -251,7 +228,7 @@ def train(run_name: str = None):
         decoder_num=DECODER_LAYERS,
     ).to(device)
 
-    model = torch.compile(model, mode="reduce-overhead")
+    model = torch.compile(model, mode="default")
 
     summary(model)
 

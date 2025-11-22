@@ -8,7 +8,7 @@ from tokenizers import Tokenizer
 from model.transformer import Transformer
 from utils.masking import combine_masks, create_causal_mask
 
-MAX_LENGTH = 256
+MAX_LENGTH = 64
 MODEL_DIM = 512
 ENCODER_LAYERS = 6
 DECODER_LAYERS = 6

@@ -11,4 +11,8 @@ model = AutoModelForCausalLM.from_pretrained(
 
 # Greedy search
 
-inputs = tokenizer("I enjoy walking with my cute dog")
+inputs = tokenizer("I enjoy walking with my cute dog", return_tensors="pt").to(
+    torch_device
+)
+greedy_output = model.generate(**inputs, max_new_tokens=40)
+print(tokenizer.decode(greedy_output[0], skip_special_tokens=True))
