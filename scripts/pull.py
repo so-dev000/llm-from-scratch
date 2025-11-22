@@ -39,57 +39,26 @@ def pull_best_model(run_name: str):
         return f.read()
 
 
-@app.function(image=image, volumes={"/vol": volume})
-def list_runs():
-    from pathlib import Path
-
-    runs_dir = Path("/vol/runs")
-    if not runs_dir.exists():
-        return []
-
-    runs = []
-    for run_dir in sorted(
-        runs_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True
-    ):
-        if run_dir.is_dir():
-            has_best = (run_dir / "best_model.pt").exists()
-            runs.append({"name": run_dir.name, "has_best": has_best})
-    return runs
-
-
 @app.local_entrypoint()
-def main(run_name: str = None, list_only: bool = False, skip_tokenizers: bool = False):
-    if list_only:
-        runs = list_runs.remote()
-        if not runs:
-            print("No training runs found")
-            return
-
-        print("\nAvailable runs:")
-        for run in runs:
-            status = "✓" if run["has_best"] else "✗"
-            print(f"  [{status}] {run['name']}")
-        return
-
+def main(run_name: str = None):
     import tarfile
     from pathlib import Path
 
     from tqdm import tqdm
 
-    if not skip_tokenizers:
-        tokenizers_data = pull_tokenizers.remote()
+    tokenizers_data = pull_tokenizers.remote()
 
-        tokenizers_path = "checkpoints/tokenizers.tar.gz"
-        os.makedirs("checkpoints", exist_ok=True)
+    tokenizers_path = "checkpoints/tokenizers.tar.gz"
+    os.makedirs("checkpoints", exist_ok=True)
 
-        with open(tokenizers_path, "wb") as f:
-            f.write(tokenizers_data)
+    with open(tokenizers_path, "wb") as f:
+        f.write(tokenizers_data)
 
-        with tarfile.open(tokenizers_path, "r:gz") as tar:
-            members = tar.getmembers()
-            for member in tqdm(members, desc="Extracting tokenizers", unit="files"):
-                tar.extract(member, "checkpoints")
-        os.remove(tokenizers_path)
+    with tarfile.open(tokenizers_path, "r:gz") as tar:
+        members = tar.getmembers()
+        for member in tqdm(members, desc="Extracting tokenizers", unit="files"):
+            tar.extract(member, "checkpoints")
+    os.remove(tokenizers_path)
 
     if run_name:
         model_data = pull_best_model.remote(run_name)
