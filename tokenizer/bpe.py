@@ -23,9 +23,6 @@ class BPE:
         self.special_tokens = special_tokens or self.DEFAULT_SPECIAL_TOKENS.copy()
         self.compiled_pattern = regex.compile(pattern or self.GPT2_PATTERN)
 
-    def _split_text(self, text):
-        return self.compiled_pattern.findall(text)
-
     def train(self, texts, vocab_size):
         num_special = len(self.special_tokens)
         # initialize vocab
@@ -41,32 +38,76 @@ class BPE:
         # Pre-tokenize: split by pattern, then encode each chunk
         all_ids = []
         for text in texts:
-            chunks = self._split_text(text)
+            chunks = self.compiled_pattern.findall(text)
             for chunk in chunks:
                 byte_vals = list(chunk.encode("utf-8"))
                 chunk_ids = [num_special + b for b in byte_vals]
                 all_ids.append(chunk_ids)
 
+        # count pairs
+        pair_counts = Counter()
+        for chunk in all_ids:
+            pair_counts.update(zip(chunk, chunk[1:]))
+
         num_merges = vocab_size - 256 - num_special
         for i in tqdm(range(num_merges), desc="Training BPE"):
-            # collect stats from all chunks
-            stats = Counter()
-            for ids in all_ids:
-                stats.update(zip(ids, ids[1:]))
-            if not stats:
+            if not pair_counts:
                 break
-            pair = max(stats, key=stats.get)
-            idx = num_special + 256 + i
-            # Apply merge to each chunk
-            all_ids = [self._merge(ids, pair, idx) for ids in all_ids]
-            self.merges[pair] = idx
-            self.vocab[idx] = self.vocab[pair[0]] + self.vocab[pair[1]]
+            pair = max(pair_counts, key=pair_counts.get)
+            new_idx = num_special + 256 + i
+
+            self.merges[pair] = new_idx
+            self.vocab[new_idx] = self.vocab[pair[0]] + self.vocab[pair[1]]
+
+            # Apply merge and update pair counts
+            self._apply_merge_and_update_pair_counts(
+                all_ids, pair, new_idx, pair_counts
+            )
+
+    def _apply_merge_and_update_pair_counts(self, chunks, pair, new_idx, pair_counts):
+        """
+        Example: merge (A, B) → X
+
+        ...P A B Q...
+              ↓
+         ...P X Q...
+
+        reduce: (P, A) (A, B) (B, Q)
+        increase: (P, X) (X, Q)
+        """
+        p0, p1 = pair
+        # delete merged pair
+        del pair_counts[pair]
+
+        for chunk in chunks:
+            i = 0
+            while i < len(chunk) - 1:
+                if chunk[i] == p0 and chunk[i + 1] == p1:
+                    if i > 0:
+                        # reduce left pair (P, A)
+                        pair_counts[(chunk[i - 1], p0)] -= 1
+                    if i + 2 < len(chunk):
+                        # reduce right pair (B, Q)
+                        pair_counts[(p1, chunk[i + 2])] -= 1
+                    # merge
+                    chunk[i : i + 2] = [new_idx]
+
+                    if i > 0:
+                        # increase new pair (P, X)
+                        pair_counts[(chunk[i - 1], new_idx)] += 1
+                    if i + 1 < len(chunk):
+                        # increase new pair (X, Q)
+                        pair_counts[(new_idx, chunk[i + 1])] += 1
+                else:
+                    i += 1
+        # delete non-positive count pairs
+        pair_counts += Counter()
 
     def encode(self, text, add_special_tokens=False):
         num_special = len(self.special_tokens)
 
         # Pre-tokenize: split by pattern, then encode each chunk
-        chunks = self._split_text(text)
+        chunks = self.compiled_pattern.findall(text)
         tokens = []
 
         if add_special_tokens:
@@ -91,23 +132,6 @@ class BPE:
 
         return tokens
 
-    def decode(self, ids, skip_special_tokens=True):
-        if skip_special_tokens:
-            special_ids = set(self.special_tokens.values())
-            ids = [i for i in ids if i not in special_ids]
-
-        tokens = b"".join(self.vocab[i] for i in ids)
-        text = tokens.decode("utf-8", errors="replace")
-        return text
-
-    def _get_stats(self, ids):
-        # get adjacent pair counts
-        counts = {}
-        for i in range(len(ids) - 1):
-            pair = (ids[i], ids[i + 1])
-            counts[pair] = counts.get(pair, 0) + 1
-        return counts
-
     def _merge(self, ids, pair, idx):
         newids = []
         i = 0
@@ -120,3 +144,12 @@ class BPE:
                 newids.append(ids[i])
                 i += 1
         return newids
+
+    def decode(self, ids, skip_special_tokens=True):
+        if skip_special_tokens:
+            special_ids = set(self.special_tokens.values())
+            ids = [i for i in ids if i not in special_ids]
+
+        tokens = b"".join(self.vocab[i] for i in ids)
+        text = tokens.decode("utf-8", errors="replace")
+        return text

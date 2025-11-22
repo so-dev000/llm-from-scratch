@@ -45,12 +45,6 @@ class TestBPE:
 
         assert len(encoded) == 3
 
-    def test_pretokenize_splits_text(self):
-        tokenizer = BPE()
-        chunks = tokenizer._split_text("Hello, world!")
-
-        assert "".join(chunks) == "Hello, world!"
-
     def test_pretokenize_preserves_boundaries(self):
         tokenizer = BPE()
         tokenizer.train(["cat", "dog"], vocab_size=300)
