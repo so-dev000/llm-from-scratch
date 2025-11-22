@@ -17,7 +17,7 @@ UNK_IDX = 1
 BOS_IDX = 2
 EOS_IDX = 3
 
-TOKENIZER_DIR = "data/tokenizers/bsd_en_ja"
+TOKENIZER_DIR = "data/tokenizers/jparacrawl"
 CHECKPOINT_BASE_DIR = "data/runs"
 
 if torch.backends.mps.is_available():

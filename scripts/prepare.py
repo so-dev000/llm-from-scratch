@@ -23,7 +23,7 @@ def prepare_data_locally():
     from tokenizers.pre_tokenizers import Split
     from tokenizers.trainers import BpeTrainer
 
-    tokenizer_dir = f"{LOCAL_DATA_DIR}/tokenizers/bsd_en_ja"
+    tokenizer_dir = f"{LOCAL_DATA_DIR}/tokenizers/jparacrawl"
     en_tokenizer_path = f"{tokenizer_dir}/en_bpe.json"
     ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.json"
 
@@ -32,8 +32,8 @@ def prepare_data_locally():
 
     dataset = load_dataset(DATASET_NAME, split="train")
 
-    en_texts = [item["en_sentence"] for item in dataset]
-    ja_texts = [item["ja_sentence"] for item in dataset]
+    en_texts = [item["english"] for item in dataset]
+    ja_texts = [item["japanese"] for item in dataset]
 
     # GPT2-style pattern matching the custom tokenizer
     gpt2_pattern = (
@@ -77,12 +77,12 @@ def upload_files(local_files):
 @app.local_entrypoint()
 def main():
     prepare_data_locally()
-    local_dir = f"{LOCAL_DATA_DIR}/tokenizers/bsd_en_ja"
+    local_dir = f"{LOCAL_DATA_DIR}/tokenizers/jparacrawl"
 
     files_to_upload = []
     for filename in os.listdir(local_dir):
         local_path = os.path.join(local_dir, filename)
-        remote_path = f"/vol/tokenizers/bsd_en_ja/{filename}"
+        remote_path = f"/vol/tokenizers/jparacrawl/{filename}"
         with open(local_path, "rb") as f:
             files_to_upload.append((f.read(), remote_path))
 

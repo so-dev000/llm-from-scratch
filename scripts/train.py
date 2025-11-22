@@ -161,7 +161,7 @@ def train(run_name: str = None):
         },
     )
 
-    tokenizer_dir = "/vol/tokenizers/bsd_en_ja"
+    tokenizer_dir = "/vol/tokenizers/jparacrawl"
     en_tokenizer_path = f"{tokenizer_dir}/en_bpe.json"
     ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.json"
 
@@ -188,8 +188,8 @@ def train(run_name: str = None):
 
         def __getitem__(self, idx):
             item = self.data[idx]
-            en_text = item["en_sentence"]
-            ja_text = item["ja_sentence"]
+            en_text = item["english"]
+            ja_text = item["japanese"]
 
             src_encoding = self.en_tokenizer.encode(en_text)
             tgt_encoding = self.ja_tokenizer.encode(ja_text)
