@@ -1,4 +1,6 @@
 import os
+import pickle
+import sys
 
 import modal
 
@@ -11,21 +13,26 @@ volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
 
 image = modal.Image.debian_slim(python_version="3.11")
 
-DATASET_NAME = "Verah/JParaCrawl-Filtered-English-Japanese-Parallel-Corpus"
+DATASET_NAME = "ryo0634/bsd_ja_en"
 VOCAB_SIZE = 8000
-SPECIAL_TOKENS = ["<PAD>", "<UNK>", "<BOS>", "<EOS>"]
+SPECIAL_TOKENS = {
+    "<PAD>": 0,
+    "<BOS>": 1,
+    "<EOS>": 2,
+    "<UNK>": 3,
+}
 
 
 def prepare_data_locally():
+    sys.path.insert(0, PROJECT_DIR)
+
     from datasets import load_dataset
-    from tokenizers import Regex, Tokenizer
-    from tokenizers.models import BPE
-    from tokenizers.pre_tokenizers import Split
-    from tokenizers.trainers import BpeTrainer
+
+    from tokenizer.bpe import BPE
 
     tokenizer_dir = f"{LOCAL_DATA_DIR}/tokenizers/bsd_en_ja"
-    en_tokenizer_path = f"{tokenizer_dir}/en_bpe.json"
-    ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.json"
+    en_tokenizer_path = f"{tokenizer_dir}/en_bpe.pkl"
+    ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.pkl"
 
     if os.path.exists(en_tokenizer_path) and os.path.exists(ja_tokenizer_path):
         return tokenizer_dir
@@ -35,30 +42,19 @@ def prepare_data_locally():
     en_texts = [item["en_sentence"] for item in dataset]
     ja_texts = [item["ja_sentence"] for item in dataset]
 
-    # GPT2-style pattern matching the custom tokenizer
-    gpt2_pattern = (
-        r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?"
-        r"[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
-    )
+    en_tokenizer = BPE(special_tokens=SPECIAL_TOKENS)
+    en_tokenizer.train(en_texts, vocab_size=VOCAB_SIZE)
 
-    en_tokenizer = Tokenizer(BPE(unk_token="<UNK>"))
-    en_tokenizer.pre_tokenizer = Split(
-        Regex(gpt2_pattern), behavior="isolated", invert=True
-    )
-    en_trainer = BpeTrainer(vocab_size=VOCAB_SIZE, special_tokens=SPECIAL_TOKENS)
-    en_tokenizer.train_from_iterator(en_texts, trainer=en_trainer)
-
-    ja_tokenizer = Tokenizer(BPE(unk_token="<UNK>"))
-    ja_tokenizer.pre_tokenizer = Split(
-        Regex(gpt2_pattern), behavior="isolated", invert=True
-    )
-    ja_trainer = BpeTrainer(vocab_size=VOCAB_SIZE, special_tokens=SPECIAL_TOKENS)
-    ja_tokenizer.train_from_iterator(ja_texts, trainer=ja_trainer)
+    ja_tokenizer = BPE(special_tokens=SPECIAL_TOKENS)
+    ja_tokenizer.train(ja_texts, vocab_size=VOCAB_SIZE)
 
     os.makedirs(tokenizer_dir, exist_ok=True)
 
-    en_tokenizer.save(en_tokenizer_path)
-    ja_tokenizer.save(ja_tokenizer_path)
+    with open(en_tokenizer_path, "wb") as f:
+        pickle.dump(en_tokenizer, f)
+
+    with open(ja_tokenizer_path, "wb") as f:
+        pickle.dump(ja_tokenizer, f)
 
     return tokenizer_dir
 

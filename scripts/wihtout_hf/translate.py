@@ -1,24 +1,23 @@
 import argparse
 import os
+import pickle
 from pathlib import Path
 
 import torch
-from tokenizers import Tokenizer
 
 from model.transformer import Transformer
 from utils.masking import combine_masks, create_causal_mask
 
 MAX_LENGTH = 64
 MODEL_DIM = 512
-ENCODER_LAYERS = 4
-DECODER_LAYERS = 4
+ENCODER_LAYERS = 6
+DECODER_LAYERS = 6
 PAD_IDX = 0
-UNK_IDX = 1
-BOS_IDX = 2
-EOS_IDX = 3
+BOS_IDX = 1
+EOS_IDX = 2
 
-TOKENIZER_DIR = "data/tokenizers/bsd_en_ja"
-CHECKPOINT_BASE_DIR = "data/runs"
+TOKENIZER_DIR = "checkpoints/tokenizers/bsd_en_ja"
+CHECKPOINT_BASE_DIR = "checkpoints/runs"
 
 if torch.backends.mps.is_available():
     device = torch.device("mps")
@@ -43,8 +42,7 @@ def find_latest_run():
 def translate_sentence(model, sentence, en_tokenizer, ja_tokenizer):
     model.eval()
 
-    src_encoding = en_tokenizer.encode(sentence)
-    src_ids = src_encoding.ids
+    src_ids = en_tokenizer.encode(sentence, add_special_tokens=True)
     src_tensor = torch.tensor(src_ids, dtype=torch.long, device=device).unsqueeze(0)
 
     src_padding_mask = src_tensor != PAD_IDX
@@ -80,9 +78,7 @@ def translate_sentence(model, sentence, en_tokenizer, ja_tokenizer):
         if pred_token_id == EOS_IDX:
             break
 
-    tgt_ids = tgt_tensor.squeeze(0).tolist()
-    filtered_ids = [id for id in tgt_ids if id not in [PAD_IDX, BOS_IDX, EOS_IDX]]
-    return ja_tokenizer.decode(filtered_ids).strip()
+    return ja_tokenizer.decode(tgt_tensor.squeeze(0).tolist(), skip_special_tokens=True)
 
 
 def main():
@@ -95,15 +91,11 @@ def main():
         print(f"Tokenizers not found at {TOKENIZER_DIR}")
         return
 
-    en_tokenizer_path = f"{TOKENIZER_DIR}/en_bpe.json"
-    ja_tokenizer_path = f"{TOKENIZER_DIR}/ja_bpe.json"
+    with open(f"{TOKENIZER_DIR}/en_bpe.pkl", "rb") as f:
+        en_tokenizer = pickle.load(f)
 
-    if not os.path.exists(en_tokenizer_path) or not os.path.exists(ja_tokenizer_path):
-        print(f"Tokenizer files not found: {en_tokenizer_path}, {ja_tokenizer_path}")
-        return
-
-    en_tokenizer = Tokenizer.from_file(en_tokenizer_path)
-    ja_tokenizer = Tokenizer.from_file(ja_tokenizer_path)
+    with open(f"{TOKENIZER_DIR}/ja_bpe.pkl", "rb") as f:
+        ja_tokenizer = pickle.load(f)
 
     run_name = args.run_name or find_latest_run()
     if not run_name:
@@ -115,7 +107,7 @@ def main():
         print(f"Checkpoint not found: {checkpoint_path}")
         return
 
-    vocab_size = max(en_tokenizer.get_vocab_size(), ja_tokenizer.get_vocab_size())
+    vocab_size = max(len(en_tokenizer.vocab), len(ja_tokenizer.vocab))
 
     model = Transformer(
         vocab_size=vocab_size,
@@ -124,15 +116,8 @@ def main():
         decoder_num=DECODER_LAYERS,
     ).to(device)
 
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
-
-    state_dict = checkpoint["model_state_dict"]
-    if any(key.startswith("_orig_mod.") for key in state_dict.keys()):
-        state_dict = {
-            key.replace("_orig_mod.", ""): value for key, value in state_dict.items()
-        }
-
-    model.load_state_dict(state_dict)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"])
 
     while True:
         try:

@@ -1,4 +1,5 @@
 import os
+import pickle
 from datetime import datetime
 
 import modal
@@ -17,25 +18,29 @@ volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("torch", "torchinfo", "tqdm", "wandb", "datasets", "tokenizers")
+    .pip_install("torch", "torchinfo", "tqdm", "wandb", "datasets", "regex")
     .add_local_dir(f"{PROJECT_DIR}/model", remote_path="/root/llm-from-scratch/model")
+    .add_local_dir(f"{PROJECT_DIR}/data", remote_path="/root/llm-from-scratch/data")
     .add_local_dir(f"{PROJECT_DIR}/utils", remote_path="/root/llm-from-scratch/utils")
     .add_local_dir(f"{PROJECT_DIR}/block", remote_path="/root/llm-from-scratch/block")
     .add_local_dir(f"{PROJECT_DIR}/layer", remote_path="/root/llm-from-scratch/layer")
     .add_local_dir(
         f"{PROJECT_DIR}/component", remote_path="/root/llm-from-scratch/component"
     )
+    .add_local_dir(
+        f"{PROJECT_DIR}/tokenizer", remote_path="/root/llm-from-scratch/tokenizer"
+    )
 )
 
-DATASET_NAME = "Verah/JParaCrawl-Filtered-English-Japanese-Parallel-Corpus"
+DATASET_NAME = "ryo0634/bsd_ja_en"
 
-BATCH_SIZE = 128
+BATCH_SIZE = 600
 LEARNING_RATE = 1e-4
-NUM_EPOCHS = 50
+NUM_EPOCHS = 10
 MAX_LENGTH = 64
 MODEL_DIM = 512
-ENCODER_LAYERS = 4
-DECODER_LAYERS = 4
+ENCODER_LAYERS = 6
+DECODER_LAYERS = 6
 PAD_IDX = 0
 CLIP_GRAD = 1.0
 
@@ -135,7 +140,6 @@ def train(run_name: str = None):
     sys.path.insert(0, "/root/llm-from-scratch")
 
     from datasets import load_dataset
-    from tokenizers import Tokenizer
 
     from model.transformer import Transformer
     from utils.collate import collate
@@ -162,16 +166,19 @@ def train(run_name: str = None):
     )
 
     tokenizer_dir = "/vol/tokenizers/bsd_en_ja"
-    en_tokenizer_path = f"{tokenizer_dir}/en_bpe.json"
-    ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.json"
+    en_tokenizer_path = f"{tokenizer_dir}/en_bpe.pkl"
+    ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.pkl"
 
     if not os.path.exists(en_tokenizer_path) or not os.path.exists(ja_tokenizer_path):
         raise FileNotFoundError("Tokenizers not found. Run scripts/prepare.py first")
 
-    en_tokenizer = Tokenizer.from_file(en_tokenizer_path)
-    ja_tokenizer = Tokenizer.from_file(ja_tokenizer_path)
+    with open(en_tokenizer_path, "rb") as f:
+        en_tokenizer = pickle.load(f)
 
-    vocab_size = max(en_tokenizer.get_vocab_size(), ja_tokenizer.get_vocab_size())
+    with open(ja_tokenizer_path, "rb") as f:
+        ja_tokenizer = pickle.load(f)
+
+    vocab_size = max(len(en_tokenizer.vocab), len(ja_tokenizer.vocab))
 
     dataset = load_dataset(DATASET_NAME, split="train")
     train_test = dataset.train_test_split(test_size=0.05, seed=42)
@@ -191,11 +198,11 @@ def train(run_name: str = None):
             en_text = item["en_sentence"]
             ja_text = item["ja_sentence"]
 
-            src_encoding = self.en_tokenizer.encode(en_text)
-            tgt_encoding = self.ja_tokenizer.encode(ja_text)
+            src_ids = self.en_tokenizer.encode(en_text, add_special_tokens=True)
+            tgt_ids = self.ja_tokenizer.encode(ja_text, add_special_tokens=True)
 
-            src_ids = src_encoding.ids[: self.max_length]
-            tgt_ids = tgt_encoding.ids[: self.max_length]
+            src_ids = src_ids[: self.max_length]
+            tgt_ids = tgt_ids[: self.max_length]
 
             src_tensor = torch.tensor(src_ids, dtype=torch.long)
             tgt_tensor = torch.tensor(tgt_ids, dtype=torch.long)
