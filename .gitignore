@@ -84,13 +84,7 @@ coverage.xml
 tmp/
 temp/
 
-# article
-article/
-
 # wandb
 wandb/
-
-# archived code
-archive/
 
 scripts/use_hf/

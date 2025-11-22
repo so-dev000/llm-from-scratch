@@ -1,5 +1,9 @@
 # LLM from Scratch
 
+## Blog
+
+[Qiita @so_dev000](https://qiita.com/so_dev000)
+
 ## Setup
 
 ```bash
