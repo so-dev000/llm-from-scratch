@@ -4,6 +4,10 @@
 
 [Qiita @so_dev000](https://qiita.com/so_dev000)
 
+## Wiki
+
+[DeepWiki](https://deepwiki.com/so-dev000/llm-from-scratch)
+
 ## Setup
 
 ```bash
