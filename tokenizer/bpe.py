@@ -1,3 +1,4 @@
+import pickle
 from collections import Counter
 
 import regex
@@ -153,3 +154,28 @@ class BPE:
         tokens = b"".join(self.vocab[i] for i in ids)
         text = tokens.decode("utf-8", errors="replace")
         return text
+
+    def save(self, path):
+        with open(path, "wb") as f:
+            pickle.dump(
+                {
+                    "merges": self.merges,
+                    "vocab": self.vocab,
+                    "special_tokens": self.special_tokens,
+                    "pattern": self.compiled_pattern.pattern,
+                },
+                f,
+            )
+
+    @classmethod
+    def load(cls, path):
+        with open(path, "rb") as f:
+            data = pickle.load(f)
+
+        tokenizer = cls(pattern=data["pattern"], special_tokens=data["special_tokens"])
+        tokenizer.merges = data["merges"]
+        tokenizer.vocab = data["vocab"]
+        return tokenizer
+
+    def get_vocab_size(self):
+        return len(self.vocab)

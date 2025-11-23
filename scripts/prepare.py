@@ -9,28 +9,30 @@ LOCAL_DATA_DIR = f"{PROJECT_DIR}/data"
 
 volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
 
-image = modal.Image.debian_slim(python_version="3.11")
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("regex", "tqdm")
+    .add_local_dir(
+        f"{PROJECT_DIR}/tokenizer", remote_path="/root/llm-from-scratch/tokenizer"
+    )
+)
 
-DATASET_NAME = "Verah/JParaCrawl-Filtered-English-Japanese-Parallel-Corpus"
+DATASET_NAME = "ryo0634/bsd_ja_en"
 VOCAB_SIZE = 8000
-SPECIAL_TOKENS = ["<PAD>", "<UNK>", "<BOS>", "<EOS>"]
-
-
-def batch_iterator(dataset, lang, batch_size=1000):
-    for i in range(0, len(dataset), batch_size):
-        yield dataset[i : i + batch_size][lang]
 
 
 def prepare_data_locally():
-    from datasets import load_dataset
-    from tokenizers import Regex, Tokenizer
-    from tokenizers.models import BPE
-    from tokenizers.pre_tokenizers import Split
-    from tokenizers.trainers import BpeTrainer
+    import sys
 
-    tokenizer_dir = f"{LOCAL_DATA_DIR}/tokenizers/jparacrawl"
-    en_tokenizer_path = f"{tokenizer_dir}/en_bpe.json"
-    ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.json"
+    sys.path.insert(0, PROJECT_DIR)
+
+    from datasets import load_dataset
+
+    from tokenizer.bpe import BPE
+
+    tokenizer_dir = f"{LOCAL_DATA_DIR}/tokenizers/bsd_en_ja"
+    en_tokenizer_path = f"{tokenizer_dir}/en_bpe.pkl"
+    ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.pkl"
 
     if os.path.exists(en_tokenizer_path) and os.path.exists(ja_tokenizer_path):
         return tokenizer_dir
@@ -43,21 +45,13 @@ def prepare_data_locally():
         r"[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"
     )
 
-    en_tokenizer = Tokenizer(BPE(unk_token="<UNK>"))
-    en_tokenizer.pre_tokenizer = Split(
-        Regex(gpt2_pattern), behavior="isolated", invert=True
-    )
-    en_trainer = BpeTrainer(vocab_size=VOCAB_SIZE, special_tokens=SPECIAL_TOKENS)
-    en_tokenizer.train_from_iterator(
-        batch_iterator(dataset, "english"), trainer=en_trainer
-    )
+    en_texts = [ex["en_sentence"] for ex in dataset]
+    en_tokenizer = BPE(pattern=gpt2_pattern)
+    en_tokenizer.train(en_texts, vocab_size=VOCAB_SIZE)
 
-    ja_tokenizer = Tokenizer(BPE(unk_token="<UNK>"))
-    # DO NOT SPLIT JAPANESE
-    ja_trainer = BpeTrainer(vocab_size=VOCAB_SIZE, special_tokens=SPECIAL_TOKENS)
-    ja_tokenizer.train_from_iterator(
-        batch_iterator(dataset, "japanese"), trainer=ja_trainer
-    )
+    ja_texts = [ex["ja_sentence"] for ex in dataset]
+    ja_tokenizer = BPE(pattern=None)
+    ja_tokenizer.train(ja_texts, vocab_size=VOCAB_SIZE)
 
     os.makedirs(tokenizer_dir, exist_ok=True)
 
@@ -80,13 +74,12 @@ def upload_files(local_files):
 
 @app.local_entrypoint()
 def main():
-    prepare_data_locally()
-    local_dir = f"{LOCAL_DATA_DIR}/tokenizers/jparacrawl"
+    local_dir = prepare_data_locally()
 
     files_to_upload = []
     for filename in os.listdir(local_dir):
         local_path = os.path.join(local_dir, filename)
-        remote_path = f"/vol/tokenizers/jparacrawl/{filename}"
+        remote_path = f"/vol/tokenizers/bsd_en_ja/{filename}"
         with open(local_path, "rb") as f:
             files_to_upload.append((f.read(), remote_path))
 

@@ -3,21 +3,21 @@ import os
 from pathlib import Path
 
 import torch
-from tokenizers import Tokenizer
 
 from model.transformer import Transformer
+from tokenizer.bpe import BPE
 from utils.masking import combine_masks, create_causal_mask
 
 MAX_LENGTH = 64
-MODEL_DIM = 512
-ENCODER_LAYERS = 6
-DECODER_LAYERS = 6
+MODEL_DIM = 256
+ENCODER_LAYERS = 4
+DECODER_LAYERS = 4
 PAD_IDX = 0
 UNK_IDX = 1
 BOS_IDX = 2
 EOS_IDX = 3
 
-TOKENIZER_DIR = "checkpoints/tokenizers/jparacrawl"
+TOKENIZER_DIR = "data/tokenizers/bsd_en_ja"
 CHECKPOINT_BASE_DIR = "checkpoints/runs"
 
 if torch.backends.mps.is_available():
@@ -43,8 +43,7 @@ def find_latest_run():
 def translate_sentence(model, sentence, en_tokenizer, ja_tokenizer):
     model.eval()
 
-    src_encoding = en_tokenizer.encode(sentence)
-    src_ids = src_encoding.ids
+    src_ids = en_tokenizer.encode(sentence, add_special_tokens=True)
     src_tensor = torch.tensor(src_ids, dtype=torch.long, device=device).unsqueeze(0)
 
     src_padding_mask = src_tensor != PAD_IDX
@@ -95,15 +94,15 @@ def main():
         print(f"Tokenizers not found at {TOKENIZER_DIR}")
         return
 
-    en_tokenizer_path = f"{TOKENIZER_DIR}/en_bpe.json"
-    ja_tokenizer_path = f"{TOKENIZER_DIR}/ja_bpe.json"
+    en_tokenizer_path = f"{TOKENIZER_DIR}/en_bpe.pkl"
+    ja_tokenizer_path = f"{TOKENIZER_DIR}/ja_bpe.pkl"
 
     if not os.path.exists(en_tokenizer_path) or not os.path.exists(ja_tokenizer_path):
         print(f"Tokenizer files not found: {en_tokenizer_path}, {ja_tokenizer_path}")
         return
 
-    en_tokenizer = Tokenizer.from_file(en_tokenizer_path)
-    ja_tokenizer = Tokenizer.from_file(ja_tokenizer_path)
+    en_tokenizer = BPE.load(en_tokenizer_path)
+    ja_tokenizer = BPE.load(ja_tokenizer_path)
 
     run_name = args.run_name or find_latest_run()
     if not run_name:
