@@ -206,10 +206,10 @@ def train(run_name: str = None):
     from datasets import DatasetDict
 
     dataset = load_dataset(DATASET_NAME, split="train")
-    # train 85%, val 10%, test 5%
+    # train 85%, val 10%, held-out 5% reserved for test CSV
     train_rest = dataset.train_test_split(test_size=0.15, seed=42)
     val_test = train_rest["test"].train_test_split(test_size=0.33, seed=42)
-    train_test = DatasetDict({"train": train_rest["train"], "test": val_test["train"]})
+    train_val = DatasetDict({"train": train_rest["train"], "val": val_test["train"]})
 
     def preprocess_batch(batch):
         src_ids = []
@@ -228,11 +228,11 @@ def train(run_name: str = None):
 
         return {"src": src_ids, "tgt": tgt_ids}
 
-    tokenized_datasets = train_test.map(
+    tokenized_datasets = train_val.map(
         preprocess_batch,
         batched=True,
         batch_size=1000,
-        remove_columns=train_test["train"].column_names,
+        remove_columns=train_val["train"].column_names,
         desc="Tokenizing dataset",
     )
 
@@ -250,7 +250,7 @@ def train(run_name: str = None):
     )
 
     val_loader = DataLoader(
-        tokenized_datasets["test"],
+        tokenized_datasets["val"],
         batch_size=BATCH_SIZE,
         shuffle=False,
         collate_fn=collate,
