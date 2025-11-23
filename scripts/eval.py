@@ -5,7 +5,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import torch
-from sacrebleu.metrics import BLEU
+from sacrebleu.metrics import CHRF
 from tqdm import tqdm
 
 from model.transformer import Transformer
@@ -75,7 +75,7 @@ def translate_sentence_beam(
         }
     ]
 
-    for step in range(max_length):
+    for _ in range(max_length):
         all_candidates = []
 
         for beam in beams:
@@ -231,7 +231,7 @@ def main():
     for sample in tqdm(test_data):
         ja = translate_sentence_beam(model, sample["en"], en_tokenizer, ja_tokenizer)
 
-        references.append([sample["ja"]])
+        references.append(sample["ja"])
         hypotheses.append(ja)
 
         results.append(
@@ -243,9 +243,8 @@ def main():
             }
         )
 
-    # Compute BLEU
-    bleu = BLEU(tokenize="ja-mecab")
-    bleu_score = bleu.corpus_score(hypotheses, references)
+    metric = CHRF(word_order=2)
+    score = metric.corpus_score(hypotheses, [references])
 
     # Exact match
     exact = sum(1 for r in results if r["ref"] == r["hyp"])
@@ -253,7 +252,7 @@ def main():
 
     # Overall
     print(
-        f"\nBLEU: {bleu_score.score:.2f} | "
+        f"\nchrF++: {score.score:.2f} | "
         f"Exact: {exact_rate:.1f}% ({exact}/{len(results)})"
     )
 
@@ -262,7 +261,7 @@ def main():
 
     for r in results:
         cat = r["category"]
-        groups[cat]["refs"].append([r["ref"]])
+        groups[cat]["refs"].append(r["ref"])
         groups[cat]["hyps"].append(r["hyp"])
         groups[cat]["total"] += 1
         if r["ref"] == r["hyp"]:
@@ -272,11 +271,11 @@ def main():
     for cat in ["short", "medium", "long"]:
         if cat in groups:
             g = groups[cat]
-            cat_bleu = BLEU(tokenize="ja-mecab")
-            score = cat_bleu.corpus_score(g["hyps"], g["refs"])
+            cat_metric = CHRF(word_order=2)
+            cat_score = cat_metric.corpus_score(g["hyps"], [g["refs"]])
             exact_pct = g["exact"] / g["total"] * 100
             print(
-                f"  {cat:6s}: BLEU {score.score:5.1f} | "
+                f"  {cat:6s}: chrF++ {cat_score.score:5.1f} | "
                 f"Exact {exact_pct:4.1f}% ({g['total']})"
             )
 

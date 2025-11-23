@@ -71,7 +71,7 @@ def translate_sentence_beam(
         }
     ]
 
-    for step in range(max_length):
+    for _ in range(max_length):
         all_candidates = []
 
         for beam in beams:
