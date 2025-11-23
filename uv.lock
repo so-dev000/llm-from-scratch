@@ -802,6 +802,12 @@ wheels = [
 ]
 
 [[package]]
+name = "ipadic"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/4e/c459f94d62a0bef89f866857bc51b9105aff236b83928618315b41a26b7b/ipadic-1.0.0.tar.gz", hash = "sha256:f5923d31eca6131acaaf18ed28d8998665b1347b640d3a6476f64650e9a71c07", size = 13413189, upload-time = "2020-07-20T03:35:40.209Z" }
+
+[[package]]
 name = "jinja2"
 version = "3.1.6"
 source = { registry = "https://pypi.org/simple" }
@@ -895,7 +901,7 @@ dependencies = [
     { name = "modal" },
     { name = "python-dotenv" },
     { name = "regex" },
-    { name = "sacrebleu" },
+    { name = "sacrebleu", extra = ["ja"] },
     { name = "tokenizers" },
     { name = "torch", version = "2.6.0+cu124", source = { registry = "https://download.pytorch.org/whl/cu124" }, marker = "sys_platform == 'win32'" },
     { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -922,7 +928,7 @@ requires-dist = [
     { name = "modal", specifier = ">=1.2.2" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "regex", specifier = ">=2025.11.3" },
-    { name = "sacrebleu", specifier = ">=2.5.1" },
+    { name = "sacrebleu", extras = ["ja"], specifier = ">=2.5.1" },
     { name = "tokenizers", specifier = ">=0.22.1" },
     { name = "torch", marker = "sys_platform == 'darwin'", specifier = ">=2.5.0" },
     { name = "torch", marker = "sys_platform == 'linux'", specifier = ">=2.5.0" },
@@ -1160,6 +1166,26 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "mecab-python3"
+version = "1.0.10"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/df/eeb4e250fc0a69b0a2deed5573f2c8d8445cf643cb9ecf25674f8186880f/mecab_python3-1.0.10.tar.gz", hash = "sha256:21cd4416043e9a993fcfb986dde93e4366a07543dd95849b5ef2e50c9a9afcce", size = 78691, upload-time = "2024-10-31T08:39:21.198Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4a/fc/f953fee2281e0a07097746cf7e8d65db4c8fef1cc802d592698d5eaea0c5/mecab_python3-1.0.10-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:fb21b38fea3da3a3c893b6af34f9d34e4846c30f7d2f76fe58beee195963fbf3", size = 523841, upload-time = "2024-10-31T08:44:58.502Z" },
+    { url = "https://files.pythonhosted.org/packages/db/15/0ab350c455bab548c7c427f0f3b8b208416234238ef02248b065c01103da/mecab_python3-1.0.10-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:7fa96813dca31ad1517a1c5921b5620713fdefea072795ec9de31425fcf2c4e1", size = 487662, upload-time = "2024-10-31T08:45:00.25Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/13/0379d4e98c16c167dc4b3a277f9c96c4743ea33597512370e52a47c727f1/mecab_python3-1.0.10-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:134e2c68a783f545bc8373601469d017a13d9b7cac46d243ec1bbfb2c94639a3", size = 484280, upload-time = "2024-10-31T08:45:03.21Z" },
+    { url = "https://files.pythonhosted.org/packages/43/b7/d978455fd39b026cdc592f8f137ae90c33f66617f7f724ee966a2d9dbb9a/mecab_python3-1.0.10-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2d9ff1c7a7ec4f42c98d74db71bc9b1d513db4cf676a023665ae40197f2da040", size = 569029, upload-time = "2024-10-31T09:00:19.823Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/65/579514a5d178e6eb9c695daace47f0f807e7286882771bbb840ac89db660/mecab_python3-1.0.10-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2953a3e53fa269f2e1b109de3a55fc7668e9e566f0340a69c2202a37f0447691", size = 591165, upload-time = "2024-10-31T08:40:32.274Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/1f/5f01f355d7eb959cbad63743d2d475b854d3b1a264926e40b92f233ca17f/mecab_python3-1.0.10-cp312-cp312-win_amd64.whl", hash = "sha256:308cbec46e426d53bde1f97a95ea655d3e6fcababe0c444dd74c9d3f8105a179", size = 503231, upload-time = "2024-10-31T08:41:39.341Z" },
+    { url = "https://files.pythonhosted.org/packages/52/16/750ae35344f62497d4b894ae49941ebfb4ea6166219e39349dc51e16e238/mecab_python3-1.0.10-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:711ee9a7ba27aa6988b580951671e5966d7b9aa16cae453d17a5e149d295941c", size = 523860, upload-time = "2024-10-31T08:45:04.671Z" },
+    { url = "https://files.pythonhosted.org/packages/71/82/98c753089eb42793ada8b92b4f616cdf004637fe61f77eb81adbe12cf274/mecab_python3-1.0.10-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:1cc4e90d23b57e1ea4bf0ecc57cf7cdbc432164398b67ad113256bc20ed52154", size = 487672, upload-time = "2024-10-31T08:45:07.12Z" },
+    { url = "https://files.pythonhosted.org/packages/81/06/c132d772cf14b9ec5dd94eba03dfef2aad8db14ec9c614a3717ef657b877/mecab_python3-1.0.10-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:4b90261aa514f29c6e05bd99717a02eeb9be3d7ea0a0be01f65ce0d86c572c68", size = 484283, upload-time = "2024-10-31T08:45:08.447Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/ee/2772cb0ba2fff59504c7ed715da626187c0f115542953f76e035531d040e/mecab_python3-1.0.10-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:894d87d708545314359cfd1b062238c2756d8f985b4c3fe7cabdf111f533a367", size = 568847, upload-time = "2024-10-31T09:00:21.345Z" },
+    { url = "https://files.pythonhosted.org/packages/8d/99/5bb828c0aeb3f02657f237304aab296526aa5463fe4f6c23c3008d536478/mecab_python3-1.0.10-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7bd7b86dd39a068dadf06ba8dd717ec1defb2cea181c5cbc6c54b1adb6dd0d4b", size = 591008, upload-time = "2024-10-31T08:40:33.333Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/e2/c752bc635c21fc45a02844e52bb61799f93c5cef4292ea5a252e11818093/mecab_python3-1.0.10-cp313-cp313-win_amd64.whl", hash = "sha256:3528ef81cc4c9506ae3b273958fe2314aa1022a8db64640e631e09fd3e1af97b", size = 503240, upload-time = "2024-10-31T08:42:08.547Z" },
 ]
 
 [[package]]
@@ -2213,6 +2239,12 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/01/14/8526cf8a5b912b618e7d6ed319a5b1876788bebba1f9a660e1291832c1cc/sacrebleu-2.5.1.tar.gz", hash = "sha256:1a088cc1c74ffaff0759c3191a85db09eecfa7a52e09be244e319d8d64e2fb11", size = 1896900, upload-time = "2025-01-03T20:15:16.772Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cd/45/7b55a7bd7e5c5b573b40ad58ba43fa09962dc5c8d71b1f573d4aeaa54a7e/sacrebleu-2.5.1-py3-none-any.whl", hash = "sha256:7c9f7ee75bec3a5bf19dd87112dfd654952130e403ad30c48298fb7da3212d5d", size = 104107, upload-time = "2025-01-03T20:15:14.626Z" },
+]
+
+[package.optional-dependencies]
+ja = [
+    { name = "ipadic" },
+    { name = "mecab-python3" },
 ]
 
 [[package]]
