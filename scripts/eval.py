@@ -244,7 +244,7 @@ def main():
         )
 
     # Compute BLEU
-    bleu = BLEU(tokenize="char")
+    bleu = BLEU(tokenize="ja-mecab")
     bleu_score = bleu.corpus_score(hypotheses, references)
 
     # Exact match
@@ -272,7 +272,8 @@ def main():
     for cat in ["short", "medium", "long"]:
         if cat in groups:
             g = groups[cat]
-            score = bleu.corpus_score(g["hyps"], g["refs"])
+            cat_bleu = BLEU(tokenize="ja-mecab")
+            score = cat_bleu.corpus_score(g["hyps"], g["refs"])
             exact_pct = g["exact"] / g["total"] * 100
             print(
                 f"  {cat:6s}: BLEU {score.score:5.1f} | "

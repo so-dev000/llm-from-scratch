@@ -20,44 +20,34 @@ modal secret create wandb-secret WANDB_API_KEY=your-wandb-key
 
 ## Workflow
 
-### Prepare Data (Modal - First time only)
+### 1. Prepare Data (Modal - First time only)
 
 ```bash
 modal run -d scripts/prepare.py
 ```
 
-### Train Model (Modal)
+### 2. Train Model (Modal)
 
 ```bash
-# Background training
 modal run -d scripts/train.py --run-name="experiment-1"
-
-# Check status
-modal app list
-modal app logs llm-training
 ```
 
-### Pull Trained Model (Local)
+### 3. Pull Trained Model (Local)
 
 ```bash
-# Pull tokenizers and specific run
 modal run scripts/pull.py --run-name="experiment-1"
-
-# Pull tokenizers only
-modal run scripts/pull.py
 ```
 
-### Translate (Local)
+### 4. Evaluate Model (Local)
 
 ```bash
-# Use latest run
-python -m scripts.translate
+python -m scripts.eval --run-name="experiment-1"
+```
 
-# Use specific run
+### 5. Translate (Local)
+
+```bash
 python -m scripts.translate --run-name="experiment-1"
-
-# Use specific checkpoint
-python -m scripts.translate --run-name="experiment-1" --checkpoint="checkpoint_epoch_10.pt"
 ```
 
 ## References
