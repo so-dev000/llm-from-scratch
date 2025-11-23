@@ -10,6 +10,7 @@ dependencies = [
     "modal>=1.2.2",
     "python-dotenv>=1.2.1",
     "regex>=2025.11.3",
+    "sacrebleu>=2.5.1",
     "tokenizers>=0.22.1",
     "torch>=2.5.0; sys_platform == 'darwin'",
     "torch>=2.5.0; sys_platform == 'linux'",

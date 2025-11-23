@@ -33,22 +33,33 @@ image = (
 DATASET_NAME = "ryo0634/bsd_ja_en"
 
 BATCH_SIZE = 256
-LEARNING_RATE = 3e-4
 NUM_EPOCHS = 50
 MAX_LENGTH = 64
 MODEL_DIM = 256
 ENCODER_LAYERS = 4
 DECODER_LAYERS = 4
 PAD_IDX = 0
-CLIP_GRAD = 1.0
 NUM_WORKERS = 8
 LABEL_SMOOTHING = 0.1
 EARLY_STOPPING_PATIENCE = 5
-WARMUP_EPOCHS = 2
+# Optimizer and learning rate parameters from "Attention is All You Need" paper
+WARMUP_STEPS = 4000
+ADAM_BETA1 = 0.9
+ADAM_BETA2 = 0.98
+ADAM_EPSILON = 1e-9
+
+
+def get_lr(step, model_dim, warmup_steps):
+    # Learning rate schedule from "Attention is All You Need" paper.
+    # lrate = d_model^(-0.5) * min(step_num^(-0.5), step_num * warmup_steps^(-1.5))
+
+    step = max(step, 1)  # Avoid division by zero
+    lr = (model_dim**-0.5) * min(step**-0.5, step * warmup_steps**-1.5)
+    return lr
 
 
 def train_epoch(
-    model, loader, optimizer, criterion, device, create_causal_mask, combine_masks
+    model, loader, optimizer, criterion, device, create_causal_mask, combine_masks, step
 ):
     model.train()
     total_loss = 0
@@ -69,6 +80,12 @@ def train_epoch(
         tgt_output = tgt[:, 1:]
         tgt_input_mask = tgt_combined_mask[:, :-1, :-1]
 
+        # Update learning rate
+        step += 1
+        lr = get_lr(step, MODEL_DIM, WARMUP_STEPS)
+        for param_group in optimizer.param_groups:
+            param_group["lr"] = lr
+
         output = model(
             src,
             tgt_input,
@@ -83,13 +100,12 @@ def train_epoch(
 
         optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), CLIP_GRAD)
         optimizer.step()
 
         total_loss += loss.item()
-        wandb.log({"batch_train_loss": loss.item()})
+        wandb.log({"batch_train_loss": loss.item(), "learning_rate": lr, "step": step})
 
-    return total_loss / len(loader)
+    return total_loss / len(loader), step
 
 
 def evaluate(model, loader, criterion, device, create_causal_mask, combine_masks):
@@ -159,7 +175,6 @@ def train(run_name: str = None):
         project="llm-from-scratch",
         name=run_name,
         config={
-            "learning_rate": LEARNING_RATE,
             "epochs": NUM_EPOCHS,
             "batch_size": BATCH_SIZE,
             "max_length": MAX_LENGTH,
@@ -167,6 +182,11 @@ def train(run_name: str = None):
             "encoder_layers": ENCODER_LAYERS,
             "decoder_layers": DECODER_LAYERS,
             "dataset": DATASET_NAME,
+            "warmup_steps": WARMUP_STEPS,
+            "adam_beta1": ADAM_BETA1,
+            "adam_beta2": ADAM_BETA2,
+            "adam_epsilon": ADAM_EPSILON,
+            "label_smoothing": LABEL_SMOOTHING,
         },
     )
 
@@ -183,7 +203,10 @@ def train(run_name: str = None):
     vocab_size = max(en_tokenizer.get_vocab_size(), ja_tokenizer.get_vocab_size())
 
     dataset = load_dataset(DATASET_NAME, split="train")
-    train_test = dataset.train_test_split(test_size=0.05, seed=42)
+    # 3-way split: train 85%, val 10%, test 5%
+    train_rest = dataset.train_test_split(test_size=0.15, seed=42)
+    val_test = train_rest["test"].train_test_split(test_size=0.33, seed=42)
+    train_test = {"train": train_rest["train"], "test": val_test["train"]}
 
     def preprocess_batch(batch):
         src_ids = []
@@ -243,9 +266,11 @@ def train(run_name: str = None):
 
     summary(model)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=2
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=0,
+        betas=(ADAM_BETA1, ADAM_BETA2),
+        eps=ADAM_EPSILON,
     )
     criterion = nn.CrossEntropyLoss(
         ignore_index=PAD_IDX, label_smoothing=LABEL_SMOOTHING
@@ -256,14 +281,10 @@ def train(run_name: str = None):
     run_checkpoint_dir = f"/vol/runs/{run_name}"
     os.makedirs(run_checkpoint_dir, exist_ok=True)
 
-    for epoch in range(NUM_EPOCHS):
-        # Warmup learning rate
-        if epoch < WARMUP_EPOCHS:
-            warmup_lr = LEARNING_RATE * (epoch + 1) / WARMUP_EPOCHS
-            for param_group in optimizer.param_groups:
-                param_group["lr"] = warmup_lr
+    step = 0
 
-        train_loss = train_epoch(
+    for epoch in range(NUM_EPOCHS):
+        train_loss, step = train_epoch(
             model,
             train_loader,
             optimizer,
@@ -271,30 +292,29 @@ def train(run_name: str = None):
             device,
             create_causal_mask,
             combine_masks,
+            step,
         )
 
         val_loss = evaluate(
             model, val_loader, criterion, device, create_causal_mask, combine_masks
         )
 
+        current_lr = optimizer.param_groups[0]["lr"]
+        loss_ratio = val_loss / train_loss if train_loss > 0 else 0
         print(
             f"Epoch {epoch + 1}/{NUM_EPOCHS} - Train Loss: {train_loss:.4f}, "
-            f"Val Loss: {val_loss:.4f}"
+            f"Val Loss: {val_loss:.4f}, Ratio: {loss_ratio:.4f}, LR: {current_lr:.2e}"
         )
 
-        current_lr = optimizer.param_groups[0]["lr"]
         wandb.log(
             {
                 "epoch": epoch + 1,
                 "train_loss": train_loss,
                 "val_loss": val_loss,
+                "val_train_loss_ratio": loss_ratio,
                 "learning_rate": current_lr,
             }
         )
-
-        # Only use scheduler after warmup
-        if epoch >= WARMUP_EPOCHS:
-            scheduler.step(val_loss)
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -302,9 +322,9 @@ def train(run_name: str = None):
             torch.save(
                 {
                     "epoch": epoch,
+                    "step": step,
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
-                    "scheduler_state_dict": scheduler.state_dict(),
                     "train_loss": train_loss,
                     "val_loss": val_loss,
                     "vocab_size": vocab_size,

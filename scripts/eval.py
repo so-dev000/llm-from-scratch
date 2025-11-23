@@ -1,8 +1,12 @@
 import argparse
+import csv
 import os
+from collections import defaultdict
 from pathlib import Path
 
 import torch
+from sacrebleu.metrics import BLEU
+from tqdm import tqdm
 
 from model.transformer import Transformer
 from tokenizer.bpe import BPE
@@ -164,6 +168,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--checkpoint", type=str, default="best_model.pt")
+    parser.add_argument("--test", type=str, default="data/test/test.csv")
+    parser.add_argument("--output", type=str, default=None)
     args = parser.parse_args()
 
     if not os.path.exists(TOKENIZER_DIR):
@@ -209,19 +215,78 @@ def main():
 
     model.load_state_dict(state_dict)
 
-    while True:
-        try:
-            en = input("EN: ").strip()
-            if en.lower() in ["exit", "quit", "q"]:
-                break
-            if not en:
-                continue
+    # Load test data
+    with open(args.test, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        test_data = [row for row in reader if row["en"].strip()]
 
-            ja = translate_sentence_beam(model, en, en_tokenizer, ja_tokenizer)
-            print(f"JA: {ja}\n")
+    # Evaluate
+    references = []
+    hypotheses = []
+    results = []
 
-        except KeyboardInterrupt:
-            break
+    for sample in tqdm(test_data):
+        ja = translate_sentence_beam(model, sample["en"], en_tokenizer, ja_tokenizer)
+
+        references.append([sample["ja"]])
+        hypotheses.append(ja)
+
+        results.append(
+            {
+                "en": sample["en"],
+                "ref": sample["ja"],
+                "hyp": ja,
+                "category": sample["category"],
+            }
+        )
+
+    # Compute BLEU
+    bleu = BLEU(tokenize="char")
+    bleu_score = bleu.corpus_score(hypotheses, references)
+
+    # Exact match
+    exact = sum(1 for r in results if r["ref"] == r["hyp"])
+    exact_rate = exact / len(results) * 100
+
+    # Overall
+    print(
+        f"\nBLEU: {bleu_score.score:.2f} | "
+        f"Exact: {exact_rate:.1f}% ({exact}/{len(results)})"
+    )
+
+    # Group by category
+    groups = defaultdict(lambda: {"refs": [], "hyps": [], "exact": 0, "total": 0})
+
+    for r in results:
+        cat = r["category"]
+        groups[cat]["refs"].append([r["ref"]])
+        groups[cat]["hyps"].append(r["hyp"])
+        groups[cat]["total"] += 1
+        if r["ref"] == r["hyp"]:
+            groups[cat]["exact"] += 1
+
+    # By category
+    for cat in ["short", "medium", "long"]:
+        if cat in groups:
+            g = groups[cat]
+            score = bleu.corpus_score(g["hyps"], g["refs"])
+            exact_pct = g["exact"] / g["total"] * 100
+            print(
+                f"  {cat:6s}: BLEU {score.score:5.1f} | "
+                f"Exact {exact_pct:4.1f}% ({g['total']})"
+            )
+
+    # Save
+    output_path = args.output
+    if not output_path:
+        output_path = Path(CHECKPOINT_BASE_DIR) / run_name / "eval_results.csv"
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["en", "ref", "hyp", "category"])
+        writer.writeheader()
+        writer.writerows(results)
+
+    print(f"\n-> {output_path}")
 
 
 if __name__ == "__main__":
