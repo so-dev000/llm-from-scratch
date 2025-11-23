@@ -202,11 +202,13 @@ def train(run_name: str = None):
 
     vocab_size = max(en_tokenizer.get_vocab_size(), ja_tokenizer.get_vocab_size())
 
+    from datasets import DatasetDict
+
     dataset = load_dataset(DATASET_NAME, split="train")
-    # 3-way split: train 85%, val 10%, test 5%
+    # train 85%, val 10%, test 5%
     train_rest = dataset.train_test_split(test_size=0.15, seed=42)
     val_test = train_rest["test"].train_test_split(test_size=0.33, seed=42)
-    train_test = {"train": train_rest["train"], "test": val_test["train"]}
+    train_test = DatasetDict({"train": train_rest["train"], "test": val_test["train"]})
 
     def preprocess_batch(batch):
         src_ids = []
