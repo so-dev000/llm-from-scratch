@@ -200,7 +200,8 @@ def train(run_name: str = None):
     en_tokenizer = BPE.load(en_tokenizer_path)
     ja_tokenizer = BPE.load(ja_tokenizer_path)
 
-    vocab_size = max(en_tokenizer.get_vocab_size(), ja_tokenizer.get_vocab_size())
+    src_vocab_size = en_tokenizer.get_vocab_size()
+    tgt_vocab_size = ja_tokenizer.get_vocab_size()
 
     from datasets import DatasetDict
 
@@ -260,10 +261,12 @@ def train(run_name: str = None):
     )
 
     model = Transformer(
-        vocab_size=vocab_size,
+        src_vocab_size=src_vocab_size,
+        tgt_vocab_size=tgt_vocab_size,
         model_dim=MODEL_DIM,
         encoder_num=ENCODER_LAYERS,
         decoder_num=DECODER_LAYERS,
+        padding_idx=PAD_IDX,
     ).to(device)
 
     summary(model)
@@ -329,7 +332,8 @@ def train(run_name: str = None):
                     "optimizer_state_dict": optimizer.state_dict(),
                     "train_loss": train_loss,
                     "val_loss": val_loss,
-                    "vocab_size": vocab_size,
+                    "src_vocab_size": src_vocab_size,
+                    "tgt_vocab_size": tgt_vocab_size,
                     "model_dim": MODEL_DIM,
                     "encoder_layers": ENCODER_LAYERS,
                     "decoder_layers": DECODER_LAYERS,

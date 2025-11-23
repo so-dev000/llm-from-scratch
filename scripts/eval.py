@@ -12,9 +12,6 @@ from model.transformer import Transformer
 from tokenizer.bpe import BPE
 from utils.masking import combine_masks, create_causal_mask
 
-MODEL_DIM = 256
-ENCODER_LAYERS = 4
-DECODER_LAYERS = 4
 PAD_IDX = 0
 UNK_IDX = 1
 BOS_IDX = 2
@@ -196,16 +193,22 @@ def main():
         print(f"Checkpoint not found: {checkpoint_path}")
         return
 
-    vocab_size = max(en_tokenizer.get_vocab_size(), ja_tokenizer.get_vocab_size())
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+
+    src_vocab_size = checkpoint["src_vocab_size"]
+    tgt_vocab_size = checkpoint["tgt_vocab_size"]
+    model_dim = checkpoint["model_dim"]
+    encoder_layers = checkpoint["encoder_layers"]
+    decoder_layers = checkpoint["decoder_layers"]
 
     model = Transformer(
-        vocab_size=vocab_size,
-        model_dim=MODEL_DIM,
-        encoder_num=ENCODER_LAYERS,
-        decoder_num=DECODER_LAYERS,
+        src_vocab_size=src_vocab_size,
+        tgt_vocab_size=tgt_vocab_size,
+        model_dim=model_dim,
+        encoder_num=encoder_layers,
+        decoder_num=decoder_layers,
+        padding_idx=PAD_IDX,
     ).to(device)
-
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
     state_dict = checkpoint["model_state_dict"]
     if any(key.startswith("_orig_mod.") for key in state_dict.keys()):

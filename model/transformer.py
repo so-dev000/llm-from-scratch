@@ -7,13 +7,22 @@ from component.token_embedding import TokenEmbedding
 
 
 class Transformer(nn.Module):
-    def __init__(self, vocab_size, model_dim, encoder_num, decoder_num):
+    def __init__(
+        self,
+        src_vocab_size,
+        tgt_vocab_size,
+        model_dim,
+        encoder_num,
+        decoder_num,
+        padding_idx=None,
+    ):
         super().__init__()
-        self.token_embedding = TokenEmbedding(vocab_size, model_dim)
+        self.src_embedding = TokenEmbedding(src_vocab_size, model_dim, padding_idx)
+        self.tgt_embedding = TokenEmbedding(tgt_vocab_size, model_dim, padding_idx)
         self.positional_encoding = PositionalEncoding(model_dim)
         self.encoder = Encoder(model_dim, encoder_num)
         self.decoder = Decoder(model_dim, decoder_num)
-        self.decoder_proj = nn.Linear(model_dim, vocab_size)
+        self.decoder_proj = nn.Linear(model_dim, tgt_vocab_size)
 
     def forward(
         self,
@@ -24,10 +33,10 @@ class Transformer(nn.Module):
         tgt_mask=None,
     ):
         # (batch_size, source_len, model_dim)
-        source_embed = self.token_embedding(source_tokens)
+        source_embed = self.src_embedding(source_tokens)
         source_embed = self.positional_encoding(source_embed)
         # (batch_size, target, model_dim)
-        target_embed = self.token_embedding(target_tokens)
+        target_embed = self.tgt_embedding(target_tokens)
         target_embed = self.positional_encoding(target_embed)
 
         encoder_out = self.encoder(source_embed, encoder_src_mask)
