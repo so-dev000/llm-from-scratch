@@ -21,6 +21,7 @@ class MultiheadAttention(nn.Module):
         # output projection: (self.w_qkv_dim * head = model_dim, model_dim)
         self.out_proj = nn.Linear(self.w_qkv_dim * head, model_dim, bias=True)
         self.dropout = nn.Dropout(p=dropout)
+        self.last_attention_weights = None
 
     def forward(self, inputs, encoder_out=None, mask=None):
         # input: (batch_size, seq_len, model_dim)
@@ -62,6 +63,8 @@ class MultiheadAttention(nn.Module):
 
         # softmax: (batch_size, head, seq_len, seq_len)
         attention_weights = F.softmax(scores, dim=-1)
+
+        self.last_attention_weights = attention_weights
 
         # dropout
         attention_weights = self.dropout(attention_weights)
