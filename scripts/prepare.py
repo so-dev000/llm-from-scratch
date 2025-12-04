@@ -4,17 +4,13 @@ import modal
 
 app = modal.App("llm-data-preparation")
 
-PROJECT_DIR = "/Users/nsota/llm-from-scratch"
-LOCAL_DATA_DIR = f"{PROJECT_DIR}/data"
 
 volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("regex", "tqdm")
-    .add_local_dir(
-        f"{PROJECT_DIR}/tokenizer", remote_path="/root/llm-from-scratch/tokenizer"
-    )
+    .add_local_dir("tokenizer", remote_path="/root/llm-from-scratch/tokenizer")
 )
 
 DATASET_NAME = "ryo0634/bsd_ja_en"
@@ -22,15 +18,11 @@ VOCAB_SIZE = 8000
 
 
 def prepare_data_locally():
-    import sys
-
-    sys.path.insert(0, PROJECT_DIR)
-
     from datasets import load_dataset
 
     from tokenizer.bpe import BPE
 
-    tokenizer_dir = f"{LOCAL_DATA_DIR}/tokenizers/bsd_en_ja"
+    tokenizer_dir = "data/tokenizers/bsd_en_ja"
     en_tokenizer_path = f"{tokenizer_dir}/en_bpe.pkl"
     ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.pkl"
 

@@ -13,28 +13,12 @@ dependencies = [
     "sacrebleu[ja]>=2.5.1",
     "tokenizers>=0.22.1",
     "torch>=2.5.0; sys_platform == 'darwin'",
-    "torch>=2.5.0; sys_platform == 'linux'",
-    "torch>=2.5.0; sys_platform == 'win32'",
-    "torchinfo>=1.8.0",
+    "torchinfo>=1.8.0; sys_platform == 'darwin'",
     "torchvision>=0.20.0; sys_platform == 'darwin'",
-    "torchvision>=0.20.0; sys_platform == 'linux'",
-    "torchvision>=0.20.0; sys_platform == 'win32'",
     "tqdm>=4.67.1",
     "transformers>=4.57.1",
+    "typer>=0.20.0",
     "wandb>=0.23.0",
-]
-
-[[tool.uv.index]]
-name = "pytorch-cu124"
-url = "https://download.pytorch.org/whl/cu124"
-explicit = true
-
-[tool.uv.sources]
-torch = [
-    { index = "pytorch-cu124", marker = "sys_platform == 'win32'" },
-]
-torchvision = [
-    { index = "pytorch-cu124", marker = "sys_platform == 'win32'" },
 ]
 
 [dependency-groups]

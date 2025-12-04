@@ -11,23 +11,18 @@ from tqdm import tqdm
 
 app = modal.App("llm-training")
 
-PROJECT_DIR = "/Users/nsota/llm-from-scratch"
 
 volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("torch", "torchinfo", "tqdm", "wandb", "datasets", "regex")
-    .add_local_dir(f"{PROJECT_DIR}/model", remote_path="/root/llm-from-scratch/model")
-    .add_local_dir(f"{PROJECT_DIR}/utils", remote_path="/root/llm-from-scratch/utils")
-    .add_local_dir(f"{PROJECT_DIR}/block", remote_path="/root/llm-from-scratch/block")
-    .add_local_dir(f"{PROJECT_DIR}/layer", remote_path="/root/llm-from-scratch/layer")
-    .add_local_dir(
-        f"{PROJECT_DIR}/component", remote_path="/root/llm-from-scratch/component"
-    )
-    .add_local_dir(
-        f"{PROJECT_DIR}/tokenizer", remote_path="/root/llm-from-scratch/tokenizer"
-    )
+    .add_local_dir("model", remote_path="/root/llm-from-scratch/model")
+    .add_local_dir("utils", remote_path="/root/llm-from-scratch/utils")
+    .add_local_dir("block", remote_path="/root/llm-from-scratch/block")
+    .add_local_dir("layer", remote_path="/root/llm-from-scratch/layer")
+    .add_local_dir("component", remote_path="/root/llm-from-scratch/component")
+    .add_local_dir("tokenizer", remote_path="/root/llm-from-scratch/tokenizer")
 )
 
 DATASET_NAME = "ryo0634/bsd_ja_en"
@@ -153,10 +148,6 @@ def evaluate(model, loader, criterion, device, create_causal_mask, combine_masks
     secrets=[modal.Secret.from_name("wandb-secret")],
 )
 def train(run_name: str = None):
-    import sys
-
-    sys.path.insert(0, "/root/llm-from-scratch")
-
     from datasets import load_dataset
 
     from model.transformer import Transformer
