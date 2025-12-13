@@ -16,7 +16,7 @@ volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("torch", "torchinfo", "tqdm", "wandb", "datasets", "regex")
+    .pip_install("torch", "torchinfo", "tqdm", "wandb", "datasets", "regex", "model")
     .add_local_dir("model", remote_path="/root/llm-from-scratch/model")
     .add_local_dir("utils", remote_path="/root/llm-from-scratch/utils")
     .add_local_dir("block", remote_path="/root/llm-from-scratch/block")
