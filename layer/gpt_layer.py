@@ -9,7 +9,7 @@ class GPTLayer(nn.Module):
         super().__init__()
         self.masked_attention = MultiheadAttention(model_dim, head)
         self.normalizer_1 = nn.LayerNorm(model_dim)
-        self.feed_forward = FeedForward(model_dim, nn.GELU())
+        self.feed_forward = FeedForward(model_dim, "GELU")
         self.normalizer_2 = nn.LayerNorm(model_dim)
 
     def forward(self, inputs, mask=None):

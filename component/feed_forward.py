@@ -7,7 +7,7 @@ ACTIVATION_FUNC = Literal["ReLU", "GELU"]
 
 class FeedForward(nn.Module):
     def __init__(
-        self, model_dim, dropout=0.1, activation_func: ACTIVATION_FUNC = "ReLu"
+        self, model_dim, dropout=0.1, activation_func: ACTIVATION_FUNC = "ReLU"
     ):
         super().__init__()
         self.linear_1 = nn.Linear(model_dim, model_dim * 4)

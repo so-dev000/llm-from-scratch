@@ -4,14 +4,17 @@ from block.gpt_block import GPTBlock
 from component.positional_embedding import PositionalEmbedding
 from component.token_embedding import TokenEmbedding
 
+# TODO: modified initialization
 
+
+# Default args: GPT-2 Small
 class GPT(nn.Module):
     def __init__(
         self,
         vocab_size,
-        model_dim,
-        layer_num,
-        head,
+        model_dim=768,
+        layer_num=12,
+        head=12,
         max_seq_len=1024,
         padding_idx=None,
         dropout=0.1,
@@ -25,6 +28,8 @@ class GPT(nn.Module):
         self.gpt_block = GPTBlock(model_dim, layer_num, head)
         self.final_norm = nn.LayerNorm(model_dim)
         self.proj = nn.Linear(model_dim, vocab_size)
+        # Weight Tying
+        self.proj.weight = self.token_embedding.embedding.weight
 
     def forward(self, tokens, mask=None):
         # (batch_size, source_len, model_dim)
