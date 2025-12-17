@@ -12,7 +12,8 @@ repos:
     hooks:
       - id: pytest
         name: pytest
-        entry: pytest
+        entry: pytest --cov=. --cov-report=term-missing
+        verbose: true
         language: system
         pass_filenames: false
         always_run: true
