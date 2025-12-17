@@ -59,3 +59,14 @@ class Transformer(nn.Module):
         )
         output = self.decoder_proj(decoder_out)
         return output
+
+    def encode_source(self, source_tokens, src_mask):
+        src_embed = self.src_embedding(source_tokens)
+        src_embed = self.positional_encoding(src_embed)
+        return self.encoder(src_embed, src_mask)
+
+    def generate_next_token(self, target_tokens, encoder_out, tgt_mask, src_mask):
+        tgt_embed = self.tgt_embedding(target_tokens)
+        tgt_embed = self.positional_encoding(tgt_embed)
+        decoder_out = self.decoder(tgt_embed, encoder_out, tgt_mask, src_mask)
+        return self.decoder_proj(decoder_out[:, -1, :])

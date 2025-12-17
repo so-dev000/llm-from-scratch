@@ -20,9 +20,7 @@ class BeamSearch(DecodingStrategy):
         beam_size = self.config.beam_size
 
         src_mask_expanded = src_mask.unsqueeze(1) & src_mask.unsqueeze(2)
-        src_embed = model.src_embedding(src_tokens)
-        src_embed = model.positional_encoding(src_embed)
-        encoder_out = model.encoder(src_embed, src_mask_expanded)
+        encoder_out = model.encode_source(src_tokens, src_mask_expanded)
 
         bos_idx = self.config.bos_idx
         eos_idx = self.config.eos_idx
@@ -43,22 +41,17 @@ class BeamSearch(DecodingStrategy):
                         continue
 
                     tgt_input = seq.unsqueeze(0)
-                    tgt_embed = model.tgt_embedding(tgt_input)
-                    tgt_embed = model.positional_encoding(tgt_embed)
-
                     tgt_len = tgt_input.size(1)
                     tgt_mask = torch.tril(
                         torch.ones(tgt_len, tgt_len, device=device)
                     ).bool()
 
-                    decoder_out = model.decoder(
-                        tgt_embed,
+                    logits = model.generate_next_token(
+                        tgt_input,
                         encoder_out[batch_idx : batch_idx + 1],
                         tgt_mask=tgt_mask,
                         src_mask=src_mask[batch_idx : batch_idx + 1],
                     )
-
-                    logits = model.decoder_proj(decoder_out[:, -1, :])
                     log_probs = F.log_softmax(logits, dim=-1)
 
                     top_log_probs, top_indices = log_probs.topk(beam_size)
@@ -99,9 +92,7 @@ class GreedyDecoding(DecodingStrategy):
         batch_size = src_tokens.size(0)
 
         src_mask_expanded = src_mask.unsqueeze(1) & src_mask.unsqueeze(2)
-        src_embed = model.src_embedding(src_tokens)
-        src_embed = model.positional_encoding(src_embed)
-        encoder_out = model.encoder(src_embed, src_mask_expanded)
+        encoder_out = model.encode_source(src_tokens, src_mask_expanded)
 
         bos_idx = self.config.bos_idx
         eos_idx = self.config.eos_idx
@@ -113,22 +104,17 @@ class GreedyDecoding(DecodingStrategy):
 
             for _ in range(max_len):
                 tgt_input = torch.tensor([output_tokens], device=device)
-                tgt_embed = model.tgt_embedding(tgt_input)
-                tgt_embed = model.positional_encoding(tgt_embed)
-
                 tgt_len = tgt_input.size(1)
                 tgt_mask = torch.tril(
                     torch.ones(tgt_len, tgt_len, device=device)
                 ).bool()
 
-                decoder_out = model.decoder(
-                    tgt_embed,
+                logits = model.generate_next_token(
+                    tgt_input,
                     encoder_out[batch_idx : batch_idx + 1],
                     tgt_mask=tgt_mask,
                     src_mask=src_mask[batch_idx : batch_idx + 1],
                 )
-
-                logits = model.decoder_proj(decoder_out[:, -1, :])
                 next_token = logits.argmax(dim=-1).item()
 
                 output_tokens.append(next_token)
@@ -143,4 +129,4 @@ class GreedyDecoding(DecodingStrategy):
 
 class SamplingDecoder(DecodingStrategy):
     def decode(self, model, src_tokens, src_mask, tokenizer, max_len):
-        return super().decode(model, src_tokens, src_mask, tokenizer, max_len)
+        raise NotImplementedError("SamplingDecoder not yet implemented")
