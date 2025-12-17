@@ -1,3 +1,4 @@
+import torch
 from torch import nn
 
 from block.decoder import Decoder
@@ -46,27 +47,34 @@ class Transformer(nn.Module):
         decoder_src_mask=None,
         tgt_mask=None,
     ):
-        # (batch_size, source_len, model_dim)
-        source_embed = self.src_embedding(source_tokens)
-        source_embed = self.positional_encoding(source_embed)
-        # (batch_size, target, model_dim)
-        target_embed = self.tgt_embedding(target_tokens)
-        target_embed = self.positional_encoding(target_embed)
-
-        encoder_out = self.encoder(source_embed, encoder_src_mask)
-        decoder_out = self.decoder(
-            target_embed, encoder_out, tgt_mask, decoder_src_mask
+        encoder_out = self.encode(source_tokens, encoder_src_mask)
+        decoder_out = self.decode(
+            target_tokens, encoder_out, tgt_mask, decoder_src_mask
         )
-        output = self.decoder_proj(decoder_out)
-        return output
+        return self.decoder_proj(decoder_out)
 
-    def encode_source(self, source_tokens, src_mask):
+    def encode(self, source_tokens, src_mask):
         src_embed = self.src_embedding(source_tokens)
         src_embed = self.positional_encoding(src_embed)
         return self.encoder(src_embed, src_mask)
 
-    def generate_next_token(self, target_tokens, encoder_out, tgt_mask, src_mask):
+    def decode(self, target_tokens, encoder_out, tgt_mask, src_mask):
         tgt_embed = self.tgt_embedding(target_tokens)
         tgt_embed = self.positional_encoding(tgt_embed)
-        decoder_out = self.decoder(tgt_embed, encoder_out, tgt_mask, src_mask)
+        return self.decoder(tgt_embed, encoder_out, tgt_mask, src_mask)
+
+    def prepare_context(self, source_tokens, src_mask=None):
+        if src_mask is not None:
+            src_mask = src_mask.unsqueeze(1) & src_mask.unsqueeze(2)
+        encoder_out = self.encode(source_tokens, src_mask)
+        return {"encoder_out": encoder_out, "src_mask": src_mask}
+
+    def generate_next_token(self, target_tokens, context):
+        encoder_out = context["encoder_out"]
+        src_mask = context["src_mask"]
+        tgt_len = target_tokens.size(1)
+        tgt_mask = torch.tril(
+            torch.ones(tgt_len, tgt_len, device=target_tokens.device)
+        ).bool()
+        decoder_out = self.decode(target_tokens, encoder_out, tgt_mask, src_mask)
         return self.decoder_proj(decoder_out[:, -1, :])

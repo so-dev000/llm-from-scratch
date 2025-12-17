@@ -68,3 +68,9 @@ class GPT(nn.Module):
         gpt_out = self.final_norm(gpt_out)
         output = self.proj(gpt_out)
         return output
+
+    def prepare_context(self, tokens, mask=None):
+        raise NotImplementedError()
+
+    def generate_next_token(self, tokens, context=None):
+        raise NotImplementedError()
