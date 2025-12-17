@@ -6,20 +6,20 @@ from torch import nn
 
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, model_dim: int, head: int, dropout: float):
+    def __init__(self, model_dim: int, num_heads: int, dropout: float):
         super().__init__()
-        if model_dim % head != 0:
-            raise ValueError("model_dim must be divisible by head")
+        if model_dim % num_heads != 0:
+            raise ValueError("model_dim must be divisible by num_heads")
         # dimension of Q(query), K(key), V(value) weights
-        self.w_qkv_dim = model_dim // head
+        self.w_qkv_dim = model_dim // num_heads
         # number of head
-        self.head = head
-        # projections for Q, K, V: (model_dim, self.w_qkv_dim * head = model_dim)
-        self.q_proj = nn.Linear(model_dim, self.w_qkv_dim * head, bias=True)
-        self.k_proj = nn.Linear(model_dim, self.w_qkv_dim * head, bias=True)
-        self.v_proj = nn.Linear(model_dim, self.w_qkv_dim * head, bias=True)
-        # output projection: (self.w_qkv_dim * head = model_dim, model_dim)
-        self.out_proj = nn.Linear(self.w_qkv_dim * head, model_dim, bias=True)
+        self.num_heads = num_heads
+        # projections for Q, K, V: (model_dim, self.w_qkv_dim * num_heads = model_dim)
+        self.q_proj = nn.Linear(model_dim, self.w_qkv_dim * num_heads, bias=True)
+        self.k_proj = nn.Linear(model_dim, self.w_qkv_dim * num_heads, bias=True)
+        self.v_proj = nn.Linear(model_dim, self.w_qkv_dim * num_heads, bias=True)
+        # output projection: (self.w_qkv_dim * num_heads = model_dim, model_dim)
+        self.out_proj = nn.Linear(self.w_qkv_dim * num_heads, model_dim, bias=True)
         self.dropout = nn.Dropout(p=dropout)
         self.last_attention_weights = None
 
@@ -37,11 +37,15 @@ class MultiheadAttention(nn.Module):
         # (batch_size, seq_len, model_dim)
         # → (batch_size, seq_len, head, w_qkv_dim)
         # → (batch_size, head, seq_len, w_qkv_dim)
-        query = query.view(batch_size, seq_len, self.head, self.w_qkv_dim).transpose(
+        # → (batch_size, seq_len, head, w_qkv_dim)
+        # → (batch_size, head, seq_len, w_qkv_dim)
+        query = query.view(
+            batch_size, seq_len, self.num_heads, self.w_qkv_dim
+        ).transpose(1, 2)
+        key = key.view(batch_size, -1, self.num_heads, self.w_qkv_dim).transpose(1, 2)
+        value = value.view(batch_size, -1, self.num_heads, self.w_qkv_dim).transpose(
             1, 2
         )
-        key = key.view(batch_size, -1, self.head, self.w_qkv_dim).transpose(1, 2)
-        value = value.view(batch_size, -1, self.head, self.w_qkv_dim).transpose(1, 2)
 
         # Q x K^T: (batch_size, head, seq_len, seq_len)
         # key.transpose(-2, -1): (batch_size, head, w_qkv_dim, seq_len)
@@ -79,7 +83,7 @@ class MultiheadAttention(nn.Module):
 
         # (batch_size, seq_len, head, w_qkv_dim)
         # → (batch_size, seq_len, head * w_qkv_dim)
-        z = z.view(batch_size, seq_len, self.head * self.w_qkv_dim)
+        z = z.view(batch_size, seq_len, self.num_heads * self.w_qkv_dim)
 
         # output projection: (batch_size, seq_len, model_dim)
         output = self.out_proj(z)

@@ -4,6 +4,39 @@ from torch import nn
 
 from model.gpt import GPT
 from model.transformer import Transformer
+from utils.decoding_strategy import BeamSearch, GreedyDecoding
+
+
+def get_optimizer_and_scheduler(module, config):
+    optim_cls = getattr(torch.optim, config.optimizer.optimizer_type)
+    optimizer = optim_cls(
+        module.parameters(),
+        lr=config.optimizer.initial_lr,
+        betas=(config.optimizer.adam_beta1, config.optimizer.adam_beta2),
+        eps=config.optimizer.adam_epsilon,
+    )
+
+    scheduler = None
+    if config.optimizer.scheduler_type == "inverse_sqrt":
+
+        def lr_lambda(step):
+            step = max(step, 1)
+            model_dim = config.model.model_dim
+            warmup_steps = config.optimizer.warmup_steps
+            return (model_dim**-0.5) * min(step**-0.5, step * warmup_steps**-1.5)
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+    if scheduler:
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1,
+            },
+        }
+    return optimizer
 
 
 class TransformerLightningModule(L.LightningModule):
@@ -73,30 +106,21 @@ class TransformerLightningModule(L.LightningModule):
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
-    def configure_optimizers(self):
-        # Select optimizer based on config
-        optim_cls = getattr(torch.optim, self.config.optimizer.optimizer_type)
-        optimizer = optim_cls(
-            self.parameters(),
-            lr=self.config.optimizer.initial_lr,
-            betas=(self.config.optimizer.adam_beta1, self.config.optimizer.adam_beta2),
-            eps=self.config.optimizer.adam_epsilon,
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        src_tokens = batch["src"]
+        src_mask = batch["src_mask"]
+
+        if self.config.inference.beam_size > 1:
+            decoder = BeamSearch(self.config.inference)
+        else:
+            decoder = GreedyDecoding(self.config.inference)
+
+        return decoder.decode(
+            self.model, src_tokens, src_mask, self.config.inference.max_gen_len
         )
 
-        # LR Scheduler (Attention Is All You Need)
-        def lr_lambda(step):
-            step = max(step, 1)
-            model_dim = self.config.model.model_dim
-            warmup_steps = self.config.optimizer.warmup_steps
-            return (model_dim**-0.5) * min(step**-0.5, step * warmup_steps**-1.5)
-
-        scheduler = {
-            "scheduler": torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda),
-            "interval": "step",
-            "frequency": 1,
-        }
-
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+    def configure_optimizers(self):
+        return get_optimizer_and_scheduler(self, self.config)
 
 
 class GPTLightningModule(L.LightningModule):
@@ -153,25 +177,18 @@ class GPTLightningModule(L.LightningModule):
         )
         return loss
 
-    def configure_optimizers(self):
-        optim_cls = getattr(torch.optim, self.config.optimizer.optimizer_type)
-        optimizer = optim_cls(
-            self.parameters(),
-            lr=self.config.optimizer.initial_lr,
-            betas=(self.config.optimizer.adam_beta1, self.config.optimizer.adam_beta2),
-            eps=self.config.optimizer.adam_epsilon,
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        tokens = batch["tokens"]
+        mask = batch.get("mask", None)
+
+        if self.config.inference.beam_size > 1:
+            decoder = BeamSearch(self.config.inference)
+        else:
+            decoder = GreedyDecoding(self.config.inference)
+
+        return decoder.decode(
+            self.model, tokens, mask, self.config.inference.max_gen_len
         )
 
-        def lr_lambda(step):
-            step = max(step, 1)
-            model_dim = self.config.model.model_dim
-            warmup_steps = self.config.optimizer.warmup_steps
-            return (model_dim**-0.5) * min(step**-0.5, step * warmup_steps**-1.5)
-
-        scheduler = {
-            "scheduler": torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda),
-            "interval": "step",
-            "frequency": 1,
-        }
-
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+    def configure_optimizers(self):
+        return get_optimizer_and_scheduler(self, self.config)

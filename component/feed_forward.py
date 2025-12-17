@@ -2,7 +2,7 @@ from typing import Literal
 
 from torch import nn
 
-ACTIVATION_FUNC = Literal["ReLU", "GELU"]
+ACTIVATION_FUNC = Literal["relu", "gelu"]
 
 
 class FeedForward(nn.Module):
@@ -15,10 +15,12 @@ class FeedForward(nn.Module):
     ):
         super().__init__()
         self.linear_1 = nn.Linear(model_dim, feedforward_dim)
-        if activation_func == "ReLU":
+        if activation_func.lower() == "relu":
             self.activation_func = nn.ReLU()
-        else:
+        elif activation_func.lower() == "gelu":
             self.activation_func = nn.GELU()
+        else:
+            raise ValueError(f"Unknown activation function: {activation_func}")
         self.linear_2 = nn.Linear(feedforward_dim, model_dim)
         self.dropout = nn.Dropout(p=dropout)
 

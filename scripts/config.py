@@ -23,6 +23,7 @@ class OptimizerConfig:
     adam_epsilon: float
     initial_lr: float = 0.0
     optimizer_type: str = "Adam"
+    scheduler_type: str = "inverse_sqrt"
 
 
 @dataclass
