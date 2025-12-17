@@ -1,17 +1,15 @@
 import argparse
-import os
 from pathlib import Path
 
 import torch
 
 from model.transformer import Transformer
+from scripts.config import Config
 from tokenizer.bpe import BPE
-from utils.inference import PAD_IDX, get_device, translate_sentence_beam
+from utils.inference_pipeline import translate_sentence
 
 TOKENIZER_DIR = "data/tokenizers/bsd_en_ja"
 CHECKPOINT_BASE_DIR = "checkpoints/runs"
-
-device = get_device()
 
 
 def find_latest_run():
@@ -32,16 +30,10 @@ def main():
     parser.add_argument("--checkpoint", type=str, default="best_model.pt")
     args = parser.parse_args()
 
-    if not os.path.exists(TOKENIZER_DIR):
-        print(f"Tokenizers not found at {TOKENIZER_DIR}")
-        return
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     en_tokenizer_path = f"{TOKENIZER_DIR}/en_bpe.pkl"
     ja_tokenizer_path = f"{TOKENIZER_DIR}/ja_bpe.pkl"
-
-    if not os.path.exists(en_tokenizer_path) or not os.path.exists(ja_tokenizer_path):
-        print(f"Tokenizer files not found: {en_tokenizer_path}, {ja_tokenizer_path}")
-        return
 
     en_tokenizer = BPE.load(en_tokenizer_path)
     ja_tokenizer = BPE.load(ja_tokenizer_path)
@@ -52,26 +44,16 @@ def main():
         return
 
     checkpoint_path = Path(CHECKPOINT_BASE_DIR) / run_name / args.checkpoint
-    if not checkpoint_path.exists():
-        print(f"Checkpoint not found: {checkpoint_path}")
-        return
-
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
-    src_vocab_size = checkpoint["src_vocab_size"]
-    tgt_vocab_size = checkpoint["tgt_vocab_size"]
-    model_dim = checkpoint["model_dim"]
-    encoder_layers = checkpoint["encoder_layers"]
-    decoder_layers = checkpoint["decoder_layers"]
+    config = Config.for_transformer()
+    config.model.src_vocab_size = checkpoint["src_vocab_size"]
+    config.model.tgt_vocab_size = checkpoint["tgt_vocab_size"]
+    config.model.model_dim = checkpoint["model_dim"]
+    config.model.encoder_layers = checkpoint["encoder_layers"]
+    config.model.decoder_layers = checkpoint["decoder_layers"]
 
-    model = Transformer(
-        src_vocab_size=src_vocab_size,
-        tgt_vocab_size=tgt_vocab_size,
-        model_dim=model_dim,
-        encoder_num=encoder_layers,
-        decoder_num=decoder_layers,
-        padding_idx=PAD_IDX,
-    ).to(device)
+    model = Transformer(config.model).to(device)
 
     state_dict = checkpoint["model_state_dict"]
     if any(key.startswith("_orig_mod.") for key in state_dict.keys()):
@@ -89,7 +71,9 @@ def main():
             if not en:
                 continue
 
-            ja = translate_sentence_beam(model, en, en_tokenizer, ja_tokenizer)
+            ja = translate_sentence(
+                model, en, en_tokenizer, ja_tokenizer, config, strategy="beam"
+            )
             print(f"JA: {ja}\n")
 
         except KeyboardInterrupt:
