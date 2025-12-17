@@ -63,7 +63,7 @@ python -m scripts.translate --run-name="exp-1"
 ### 6. Generate (Modal)
 
 ```bash
-modal run scripts/generate.py <checkpoint> --model-type=transformer --prompt="Hello"
+modal run scripts/generate.py --run-name="exp-1" --prompt="Hello"
 ```
 
 ## Project Structure

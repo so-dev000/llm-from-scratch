@@ -20,11 +20,9 @@ class BeamSearch(DecodingStrategy):
         beam_size = self.config.beam_size
 
         src_mask_expanded = src_mask.unsqueeze(1) & src_mask.unsqueeze(2)
-        encoder_out = model.encoder(
-            model.src_embedding(src_tokens),
-            src_mask_expanded,
-        )
-        encoder_out = model.positional_encoding(encoder_out)
+        src_embed = model.src_embedding(src_tokens)
+        src_embed = model.positional_encoding(src_embed)
+        encoder_out = model.encoder(src_embed, src_mask_expanded)
 
         bos_idx = self.config.bos_idx
         eos_idx = self.config.eos_idx
@@ -101,11 +99,9 @@ class GreedyDecoding(DecodingStrategy):
         batch_size = src_tokens.size(0)
 
         src_mask_expanded = src_mask.unsqueeze(1) & src_mask.unsqueeze(2)
-        encoder_out = model.encoder(
-            model.src_embedding(src_tokens),
-            src_mask_expanded,
-        )
-        encoder_out = model.positional_encoding(encoder_out)
+        src_embed = model.src_embedding(src_tokens)
+        src_embed = model.positional_encoding(src_embed)
+        encoder_out = model.encoder(src_embed, src_mask_expanded)
 
         bos_idx = self.config.bos_idx
         eos_idx = self.config.eos_idx

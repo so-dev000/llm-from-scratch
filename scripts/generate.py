@@ -24,26 +24,39 @@ image = (
 
 @app.function(
     image=image,
-    gpu="L4",
+    gpu="L40S",
     volumes={"/vol": volume},
     timeout=3600,
 )
-def generate(
-    checkpoint_path: str, prompts: list[str], config: Config, strategy: str = "beam"
-):
+def generate(run_name: str, prompts: list[str], config: Config, strategy: str = "beam"):
     from tokenizer.bpe import BPE
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if config.model.model_type == "transformer":
-        model = Transformer(config.model).to(device)
-
         tokenizer_dir = config.tokenizer_dir + "/bsd_en_ja"
         src_tokenizer = BPE.load(f"{tokenizer_dir}/en_bpe.pkl")
         tgt_tokenizer = BPE.load(f"{tokenizer_dir}/ja_bpe.pkl")
 
-        checkpoint = torch.load(checkpoint_path, map_location=device)
-        model.load_state_dict(checkpoint["model_state_dict"])
+        checkpoint_path = f"{config.checkpoint_dir}/{run_name}/best_model.ckpt"
+        checkpoint = torch.load(
+            checkpoint_path, map_location=device, weights_only=False
+        )
+
+        hyper_params = checkpoint.get("hyper_parameters", {})
+        config.model.src_vocab_size = hyper_params.get("model.src_vocab_size", 8000)
+        config.model.tgt_vocab_size = hyper_params.get("model.tgt_vocab_size", 8000)
+
+        model = Transformer(config.model).to(device)
+
+        state_dict = checkpoint["state_dict"]
+        new_state_dict = {}
+        for key, value in state_dict.items():
+            if key.startswith("model."):
+                new_key = key[6:]
+                new_state_dict[new_key] = value
+
+        model.load_state_dict(new_state_dict)
 
         outputs = translate_batch(
             model, prompts, src_tokenizer, tgt_tokenizer, config, strategy
@@ -59,7 +72,7 @@ def generate(
 
 @app.local_entrypoint()
 def main(
-    checkpoint_path: str,
+    run_name: str,
     model_type: str = "transformer",
     prompt: str = None,
     prompts_file: str = None,
@@ -80,8 +93,8 @@ def main(
     else:
         raise ValueError("Either --prompt or --prompts-file must be provided")
 
-    results = generate.remote(checkpoint_path, prompts, config, strategy)
+    results = generate.remote(run_name, prompts, config, strategy)
 
-    for i, (prompt, result) in enumerate(zip(prompts, results)):
-        print(f"\nInput {i + 1}: {prompt}")
+    for i, (p, result) in enumerate(zip(prompts, results)):
+        print(f"\nInput {i + 1}: {p}")
         print(f"Output {i + 1}: {result}")
