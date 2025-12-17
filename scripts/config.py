@@ -9,6 +9,7 @@ class DataConfig:
     max_length: int
     num_workers: int
     pad_idx: int
+    vocab_size: int = 8000
     prefetch_factor: int = 4
     pin_memory: bool = True
     persistent_workers: bool = True

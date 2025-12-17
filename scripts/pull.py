@@ -2,6 +2,8 @@ import os
 
 import modal
 
+from scripts.config import Config
+
 app = modal.App("llm-pull")
 
 volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
@@ -28,10 +30,10 @@ def pull_tokenizers():
 
 
 @app.function(image=image, volumes={"/vol": volume})
-def pull_best_model(run_name: str):
+def pull_best_model(run_name: str, config: Config):
     from pathlib import Path
 
-    best_model_path = Path(f"/vol/runs/{run_name}/best_model.pt")
+    best_model_path = Path(f"{config.checkpoint_dir}/{run_name}/best_model.pt")
     if not best_model_path.exists():
         raise FileNotFoundError(f"best_model.pt not found for run '{run_name}'")
 
@@ -46,6 +48,7 @@ def main(run_name: str = None):
 
     from tqdm import tqdm
 
+    config = Config.for_transformer()
     tokenizers_data = pull_tokenizers.remote()
 
     tokenizers_path = "checkpoints/tokenizers.tar.gz"
@@ -61,7 +64,7 @@ def main(run_name: str = None):
     os.remove(tokenizers_path)
 
     if run_name:
-        model_data = pull_best_model.remote(run_name)
+        model_data = pull_best_model.remote(run_name, config)
 
         model_dir = Path(f"checkpoints/runs/{run_name}")
         model_dir.mkdir(parents=True, exist_ok=True)

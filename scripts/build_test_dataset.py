@@ -4,6 +4,8 @@ from collections import Counter
 
 from datasets import load_dataset
 
+from scripts.config import Config
+
 
 def categorize(text: str) -> str:
     words = len(text.split())
@@ -14,10 +16,11 @@ def categorize(text: str) -> str:
     return "long"
 
 
-def build_dataset(output_path: str = "data/test/test.csv", seed: int = 42) -> None:
-    dataset = load_dataset("ryo0634/bsd_ja_en", split="train")
+def build_dataset(
+    config: Config, output_path: str = "data/test/test.csv", seed: int = 42
+) -> None:
+    dataset = load_dataset(config.data.dataset_name, split="train")
 
-    # 3-way split: train 85%, val 10%, test 5%
     train_rest = dataset.train_test_split(test_size=0.15, seed=seed)
     val_test = train_rest["test"].train_test_split(test_size=0.33, seed=seed)
     test_data = val_test["test"]
@@ -51,4 +54,5 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42)
 
     args = parser.parse_args()
-    build_dataset(args.output, args.seed)
+    config = Config.for_transformer()
+    build_dataset(config, args.output, args.seed)
