@@ -5,11 +5,20 @@ from component.multihead_attention import MultiheadAttention
 
 
 class GPTLayer(nn.Module):
-    def __init__(self, model_dim, head):
+    def __init__(
+        self,
+        model_dim: int,
+        num_heads: int,
+        feedforward_dim: int,
+        dropout: float,
+        activation_func: str,
+    ):
         super().__init__()
-        self.masked_attention = MultiheadAttention(model_dim, head)
+        self.masked_attention = MultiheadAttention(model_dim, num_heads, dropout)
         self.normalizer_1 = nn.LayerNorm(model_dim)
-        self.feed_forward = FeedForward(model_dim, "GELU")
+        self.feed_forward = FeedForward(
+            model_dim, feedforward_dim, dropout, activation_func
+        )
         self.normalizer_2 = nn.LayerNorm(model_dim)
 
     def forward(self, inputs, mask=None):

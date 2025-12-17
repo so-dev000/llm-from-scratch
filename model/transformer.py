@@ -7,22 +7,36 @@ from component.token_embedding import TokenEmbedding
 
 
 class Transformer(nn.Module):
-    def __init__(
-        self,
-        src_vocab_size,
-        tgt_vocab_size,
-        model_dim,
-        encoder_num,
-        decoder_num,
-        padding_idx=None,
-    ):
+    def __init__(self, config):
         super().__init__()
-        self.src_embedding = TokenEmbedding(src_vocab_size, model_dim, padding_idx)
-        self.tgt_embedding = TokenEmbedding(tgt_vocab_size, model_dim, padding_idx)
-        self.positional_encoding = PositionalEncoding(model_dim)
-        self.encoder = Encoder(model_dim, encoder_num)
-        self.decoder = Decoder(model_dim, decoder_num)
-        self.decoder_proj = nn.Linear(model_dim, tgt_vocab_size)
+        self.config = config
+
+        self.src_embedding = TokenEmbedding(
+            config.src_vocab_size, config.model_dim, config.padding_idx
+        )
+        self.tgt_embedding = TokenEmbedding(
+            config.tgt_vocab_size, config.model_dim, config.padding_idx
+        )
+        self.positional_encoding = PositionalEncoding(
+            config.model_dim, config.dropout, config.max_seq_len
+        )
+        self.encoder = Encoder(
+            config.model_dim,
+            config.encoder_layers,
+            config.num_heads,
+            config.feedforward_dim,
+            config.dropout,
+            config.activation,
+        )
+        self.decoder = Decoder(
+            config.model_dim,
+            config.decoder_layers,
+            config.num_heads,
+            config.feedforward_dim,
+            config.dropout,
+            config.activation,
+        )
+        self.decoder_proj = nn.Linear(config.model_dim, config.tgt_vocab_size)
 
     def forward(
         self,

@@ -9,7 +9,12 @@ class TestFeedForward:
         seq_len = 6
         model_dim = 512
 
-        ff = FeedForward(model_dim=model_dim)
+        ff = FeedForward(
+            model_dim=model_dim,
+            feedforward_dim=model_dim * 4,
+            dropout=0.1,
+            activation_func="ReLU",
+        )
         inputs = torch.randn(batch_size, seq_len, model_dim)
         output = ff(inputs)
 

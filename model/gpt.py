@@ -7,28 +7,29 @@ from component.positional_embedding import PositionalEmbedding
 from component.token_embedding import TokenEmbedding
 
 
-# Default args: GPT-2 Small
 class GPT(nn.Module):
-    def __init__(
-        self,
-        vocab_size,
-        model_dim=768,
-        layer_num=12,
-        head=12,
-        max_seq_len=1024,
-        padding_idx=None,
-        dropout=0.1,
-    ):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
+        self.layer_num = config.num_layers
+
         self.token_embedding = TokenEmbedding(
-            vocab_size, model_dim, padding_idx, scaling=False
+            config.vocab_size, config.model_dim, config.padding_idx, scaling=False
         )
-        self.positional_embedding = PositionalEmbedding(max_seq_len, model_dim)
-        self.embedding_dropout = nn.Dropout(p=dropout)
-        self.gpt_block = GPTBlock(model_dim, layer_num, head)
-        self.layer_num = layer_num
-        self.final_norm = nn.LayerNorm(model_dim)
-        self.proj = nn.Linear(model_dim, vocab_size)
+        self.positional_embedding = PositionalEmbedding(
+            config.max_seq_len, config.model_dim
+        )
+        self.embedding_dropout = nn.Dropout(p=config.dropout)
+        self.gpt_block = GPTBlock(
+            config.model_dim,
+            config.num_layers,
+            config.num_heads,
+            config.feedforward_dim,
+            config.dropout,
+            config.activation,
+        )
+        self.final_norm = nn.LayerNorm(config.model_dim)
+        self.proj = nn.Linear(config.model_dim, config.vocab_size)
         # Weight Tying
         self.proj.weight = self.token_embedding.embedding.weight
         self._init_weight()

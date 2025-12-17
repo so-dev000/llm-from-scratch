@@ -10,7 +10,7 @@ class TestMultiheadAttention:
         seq_len = 6
         model_dim = 512
 
-        attention = MultiheadAttention(model_dim=model_dim)
+        attention = MultiheadAttention(model_dim=model_dim, head=8, dropout=0.1)
         inputs = torch.randn(batch_size, seq_len, model_dim)
         output = attention(inputs)
 
@@ -19,14 +19,14 @@ class TestMultiheadAttention:
     def test_invalid_model_dim_raises_value_error(self):
         model_dim = 513  # Not divisible by default head=8
         with pytest.raises(ValueError, match="model_dim must be divisible by head"):
-            MultiheadAttention(model_dim=model_dim)
+            MultiheadAttention(model_dim=model_dim, head=8, dropout=0.1)
 
     def test_with_2d_mask(self):
         batch_size = 2
         seq_len = 4
         model_dim = 512
 
-        attention = MultiheadAttention(model_dim=model_dim)
+        attention = MultiheadAttention(model_dim=model_dim, head=8, dropout=0.1)
         inputs = torch.randn(batch_size, seq_len, model_dim)
         mask = torch.tril(torch.ones(seq_len, seq_len)).bool()  # (4, 4)
 
@@ -39,7 +39,7 @@ class TestMultiheadAttention:
         seq_len = 4
         model_dim = 512
 
-        attention = MultiheadAttention(model_dim=model_dim)
+        attention = MultiheadAttention(model_dim=model_dim, head=8, dropout=0.1)
         inputs = torch.randn(batch_size, seq_len, model_dim)
         mask = torch.tril(torch.ones(batch_size, seq_len, seq_len)).bool()  # (2, 4, 4)
 
@@ -53,7 +53,7 @@ class TestMultiheadAttention:
         src_seq_len = 5
         model_dim = 512
 
-        attention = MultiheadAttention(model_dim=model_dim)
+        attention = MultiheadAttention(model_dim=model_dim, head=8, dropout=0.1)
         query_inputs = torch.randn(batch_size, tgt_seq_len, model_dim)
         encoder_outputs = torch.randn(batch_size, src_seq_len, model_dim)
         mask = torch.ones(batch_size, src_seq_len).bool()

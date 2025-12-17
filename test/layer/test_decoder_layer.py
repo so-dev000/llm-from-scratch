@@ -9,7 +9,13 @@ class TestDecoderLayer:
         seq_len = 6
         model_dim = 512
 
-        decoder_layer = DecoderLayer(model_dim=model_dim)
+        decoder_layer = DecoderLayer(
+            model_dim=model_dim,
+            num_heads=8,
+            feedforward_dim=model_dim * 4,
+            dropout=0.1,
+            activation_func="ReLU",
+        )
         inputs = torch.randn(batch_size, seq_len, model_dim)
         encoder_out = torch.randn(batch_size, seq_len, model_dim)
         output = decoder_layer(inputs, encoder_out)

@@ -6,7 +6,7 @@ from torch import nn
 
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, model_dim, head=8, dropout=0.1):
+    def __init__(self, model_dim: int, head: int, dropout: float):
         super().__init__()
         if model_dim % head != 0:
             raise ValueError("model_dim must be divisible by head")
