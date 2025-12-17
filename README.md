@@ -71,13 +71,20 @@ python -m scripts.translate --run-name="experiment-1"
 
 - [Language Models are Unsupervised Multitask Learners](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)
 
+- [Perplexity of fixed-length models](https://huggingface.co/docs/transformers/perplexity)
+
+- [THE CURIOUS CASE OF NEURAL TEXT DeGENERATION](https://arxiv.org/pdf/1904.09751)
+
+- [Decoding Strategies in Large Language Models](https://huggingface.co/blog/mlabonne/decoding-strategies)
+
+- [How to generate text: using different decoding methods for language generation with Transformers](https://huggingface.co/blog/how-to-generate)
+
 ### Tokenizer
 
 - [Normalization and pre-tokenization](https://huggingface.co/learn/llm-course/chapter6/4)
 - [Byte-Pair Encoding tokenization](https://huggingface.co/learn/llm-course/chapter6/5)
 - [Let's build the GPT Tokenizer](https://www.youtube.com/watch?v=zduSFxRajkE)
 - [Tiktokenizer](https://tiktokenizer.vercel.app/?model=gpt2)
-- [Decoding Strategies in Large Language Models](https://huggingface.co/blog/mlabonne/decoding-strategies)
 
 ### Word2Vec
 
