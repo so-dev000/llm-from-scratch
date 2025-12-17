@@ -2,13 +2,13 @@ import os
 
 import modal
 
-from scripts.config import Config
-
 app = modal.App("llm-pull")
 
 volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
 
 image = modal.Image.debian_slim(python_version="3.11").pip_install("tqdm")
+
+CHECKPOINT_DIR = "/vol/runs"
 
 
 @app.function(image=image, volumes={"/vol": volume})
@@ -30,12 +30,12 @@ def pull_tokenizers():
 
 
 @app.function(image=image, volumes={"/vol": volume})
-def pull_best_model(run_name: str, config: Config):
+def pull_best_model(run_name: str):
     from pathlib import Path
 
-    best_model_path = Path(f"{config.checkpoint_dir}/{run_name}/best_model.pt")
+    best_model_path = Path(f"{CHECKPOINT_DIR}/{run_name}/best_model.ckpt")
     if not best_model_path.exists():
-        raise FileNotFoundError(f"best_model.pt not found for run '{run_name}'")
+        raise FileNotFoundError(f"best_model.ckpt not found for run '{run_name}'")
 
     with open(best_model_path, "rb") as f:
         return f.read()
@@ -48,7 +48,6 @@ def main(run_name: str = None):
 
     from tqdm import tqdm
 
-    config = Config.for_transformer()
     tokenizers_data = pull_tokenizers.remote()
 
     tokenizers_path = "checkpoints/tokenizers.tar.gz"
@@ -64,16 +63,16 @@ def main(run_name: str = None):
     os.remove(tokenizers_path)
 
     if run_name:
-        model_data = pull_best_model.remote(run_name, config)
+        model_data = pull_best_model.remote(run_name)
 
         model_dir = Path(f"checkpoints/runs/{run_name}")
         model_dir.mkdir(parents=True, exist_ok=True)
 
-        model_path = model_dir / "best_model.pt"
+        model_path = model_dir / "best_model.ckpt"
         with open(model_path, "wb") as f:
             with tqdm(
                 total=len(model_data),
-                desc="Saving best_model.pt",
+                desc="Saving best_model.ckpt",
                 unit="B",
                 unit_scale=True,
             ) as pbar:

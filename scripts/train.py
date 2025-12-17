@@ -26,13 +26,13 @@ image = (
         "datasets",
         "regex",
     )
-    .add_local_dir("model", remote_path="/root/llm-from-scratch/model")
-    .add_local_dir("utils", remote_path="/root/llm-from-scratch/utils")
-    .add_local_dir("block", remote_path="/root/llm-from-scratch/block")
-    .add_local_dir("layer", remote_path="/root/llm-from-scratch/layer")
-    .add_local_dir("component", remote_path="/root/llm-from-scratch/component")
-    .add_local_dir("tokenizer", remote_path="/root/llm-from-scratch/tokenizer")
-    .add_local_dir("scripts", remote_path="/root/llm-from-scratch/scripts")
+    .add_local_dir("model", remote_path="/root/model")
+    .add_local_dir("utils", remote_path="/root/utils")
+    .add_local_dir("block", remote_path="/root/block")
+    .add_local_dir("layer", remote_path="/root/layer")
+    .add_local_dir("component", remote_path="/root/component")
+    .add_local_dir("tokenizer", remote_path="/root/tokenizer")
+    .add_local_dir("scripts", remote_path="/root/scripts")
 )
 
 
@@ -63,13 +63,21 @@ class TransformerLightningModule(L.LightningModule):
         src = batch["src"]
         tgt = batch["tgt"]
         src_mask = batch["src_mask"]
-        tgt_mask = batch["tgt_mask"]
+        tgt_padding_mask = batch["tgt_mask"]
 
         src_mask_expanded = src_mask.unsqueeze(1) & src_mask.unsqueeze(2)
 
         tgt_input = tgt[:, :-1]
         tgt_output = tgt[:, 1:]
-        tgt_input_mask = tgt_mask[:, :-1, :-1]
+
+        tgt_len = tgt_input.size(1)
+        causal_mask = torch.tril(torch.ones(tgt_len, tgt_len, device=tgt.device)).bool()
+        tgt_padding = tgt_padding_mask[:, :-1]
+        tgt_input_mask = (
+            causal_mask.unsqueeze(0)
+            & tgt_padding.unsqueeze(1)
+            & tgt_padding.unsqueeze(2)
+        )
 
         output = self(
             src,
@@ -171,7 +179,7 @@ class GPTLightningModule(L.LightningModule):
 
 @app.function(
     image=image,
-    gpu="L4",
+    gpu="L40S",
     volumes={"/vol": volume},
     timeout=3600 * 12,
     secrets=[modal.Secret.from_name("wandb-secret")],
@@ -179,14 +187,16 @@ class GPTLightningModule(L.LightningModule):
 def train(config: Config):
     torch.set_float32_matmul_precision("high")
 
+    data_module = get_data_module(config)
+    data_module.prepare_data()
+    data_module.setup(stage="fit")
+
     if config.model.model_type == "transformer":
         pl_module = TransformerLightningModule(config)
     elif config.model.model_type == "gpt":
         pl_module = GPTLightningModule(config)
     else:
         raise ValueError(f"Unknown model type: {config.model.model_type}")
-
-    data_module = get_data_module(config)
 
     callbacks = [
         TransformerLRScheduler(config.model.model_dim, config.optimizer.warmup_steps),

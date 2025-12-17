@@ -8,7 +8,7 @@ from scripts.config import Config
 from tokenizer.bpe import BPE
 from utils.inference_pipeline import translate_sentence
 
-TOKENIZER_DIR = "data/tokenizers/bsd_en_ja"
+TOKENIZER_DIR = "checkpoints/tokenizers/bsd_en_ja"
 CHECKPOINT_BASE_DIR = "checkpoints/runs"
 
 
@@ -27,7 +27,7 @@ def find_latest_run():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-name", type=str, default=None)
-    parser.add_argument("--checkpoint", type=str, default="best_model.pt")
+    parser.add_argument("--checkpoint", type=str, default="best_model.ckpt")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -46,22 +46,24 @@ def main():
     checkpoint_path = Path(CHECKPOINT_BASE_DIR) / run_name / args.checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
+    hyper_params = checkpoint.get("hyper_parameters", {})
     config = Config.for_transformer()
-    config.model.src_vocab_size = checkpoint["src_vocab_size"]
-    config.model.tgt_vocab_size = checkpoint["tgt_vocab_size"]
-    config.model.model_dim = checkpoint["model_dim"]
-    config.model.encoder_layers = checkpoint["encoder_layers"]
-    config.model.decoder_layers = checkpoint["decoder_layers"]
+    config.model.src_vocab_size = hyper_params.get("model.src_vocab_size", 8000)
+    config.model.tgt_vocab_size = hyper_params.get("model.tgt_vocab_size", 8000)
 
     model = Transformer(config.model).to(device)
 
-    state_dict = checkpoint["model_state_dict"]
-    if any(key.startswith("_orig_mod.") for key in state_dict.keys()):
-        state_dict = {
-            key.replace("_orig_mod.", ""): value for key, value in state_dict.items()
-        }
+    state_dict = checkpoint["state_dict"]
+    new_state_dict = {}
+    for key, value in state_dict.items():
+        if key.startswith("model."):
+            new_key = key[6:]
+            new_state_dict[new_key] = value
 
-    model.load_state_dict(state_dict)
+    model.load_state_dict(new_state_dict)
+
+    print(f"Loaded model from {checkpoint_path}")
+    print("Enter English text to translate (q to quit)")
 
     while True:
         try:

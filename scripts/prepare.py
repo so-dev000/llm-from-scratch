@@ -2,8 +2,6 @@ import os
 
 import modal
 
-from scripts.config import Config
-
 app = modal.App("llm-data-preparation")
 
 volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
@@ -14,8 +12,11 @@ image = (
     .add_local_dir("tokenizer", remote_path="/root/llm-from-scratch/tokenizer")
 )
 
+DATASET_NAME = "ryo0634/bsd_ja_en"
+VOCAB_SIZE = 8000
 
-def prepare_data_locally(config: Config):
+
+def prepare_data_locally():
     from datasets import load_dataset
 
     from tokenizer.bpe import BPE
@@ -27,7 +28,7 @@ def prepare_data_locally(config: Config):
     if os.path.exists(en_tokenizer_path) and os.path.exists(ja_tokenizer_path):
         return tokenizer_dir
 
-    dataset = load_dataset(config.data.dataset_name, split="train")
+    dataset = load_dataset(DATASET_NAME, split="train")
 
     gpt2_pattern = (
         r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?"
@@ -36,11 +37,11 @@ def prepare_data_locally(config: Config):
 
     en_texts = [ex["en_sentence"] for ex in dataset]
     en_tokenizer = BPE(pattern=gpt2_pattern)
-    en_tokenizer.train(en_texts, vocab_size=config.data.vocab_size)
+    en_tokenizer.train(en_texts, vocab_size=VOCAB_SIZE)
 
     ja_texts = [ex["ja_sentence"] for ex in dataset]
     ja_tokenizer = BPE(pattern=None)
-    ja_tokenizer.train(ja_texts, vocab_size=config.data.vocab_size)
+    ja_tokenizer.train(ja_texts, vocab_size=VOCAB_SIZE)
 
     os.makedirs(tokenizer_dir, exist_ok=True)
 
@@ -63,8 +64,7 @@ def upload_files(local_files):
 
 @app.local_entrypoint()
 def main():
-    config = Config.for_transformer()
-    local_dir = prepare_data_locally(config)
+    local_dir = prepare_data_locally()
 
     files_to_upload = []
     for filename in os.listdir(local_dir):
