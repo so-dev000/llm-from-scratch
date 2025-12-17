@@ -22,6 +22,7 @@ class OptimizerConfig:
     adam_beta2: float
     adam_epsilon: float
     initial_lr: float = 0.0
+    optimizer_type: str = "Adam"
 
 
 @dataclass

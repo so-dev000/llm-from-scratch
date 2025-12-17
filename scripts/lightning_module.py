@@ -74,13 +74,29 @@ class TransformerLightningModule(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(
+        # Select optimizer based on config
+        optim_cls = getattr(torch.optim, self.config.optimizer.optimizer_type)
+        optimizer = optim_cls(
             self.parameters(),
             lr=self.config.optimizer.initial_lr,
             betas=(self.config.optimizer.adam_beta1, self.config.optimizer.adam_beta2),
             eps=self.config.optimizer.adam_epsilon,
         )
-        return optimizer
+
+        # LR Scheduler (Attention Is All You Need)
+        def lr_lambda(step):
+            step = max(step, 1)
+            model_dim = self.config.model.model_dim
+            warmup_steps = self.config.optimizer.warmup_steps
+            return (model_dim**-0.5) * min(step**-0.5, step * warmup_steps**-1.5)
+
+        scheduler = {
+            "scheduler": torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda),
+            "interval": "step",
+            "frequency": 1,
+        }
+
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 
 class GPTLightningModule(L.LightningModule):
@@ -138,10 +154,24 @@ class GPTLightningModule(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(
+        optim_cls = getattr(torch.optim, self.config.optimizer.optimizer_type)
+        optimizer = optim_cls(
             self.parameters(),
             lr=self.config.optimizer.initial_lr,
             betas=(self.config.optimizer.adam_beta1, self.config.optimizer.adam_beta2),
             eps=self.config.optimizer.adam_epsilon,
         )
-        return optimizer
+
+        def lr_lambda(step):
+            step = max(step, 1)
+            model_dim = self.config.model.model_dim
+            warmup_steps = self.config.optimizer.warmup_steps
+            return (model_dim**-0.5) * min(step**-0.5, step * warmup_steps**-1.5)
+
+        scheduler = {
+            "scheduler": torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda),
+            "interval": "step",
+            "frequency": 1,
+        }
+
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}

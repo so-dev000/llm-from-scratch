@@ -9,29 +9,6 @@ from tokenizer.bpe import BPE
 from utils.collate import collate
 
 
-class TransformerLRScheduler(L.Callback):
-    def __init__(self, model_dim: int, warmup_steps: int):
-        super().__init__()
-        self.model_dim = model_dim
-        self.warmup_steps = warmup_steps
-        self.step = 0
-
-    def on_train_batch_start(self, trainer, pl_module, batch, batch_idx):
-        self.step += 1
-        lr = self._get_lr(self.step)
-
-        for optimizer in trainer.optimizers:
-            for param_group in optimizer.param_groups:
-                param_group["lr"] = lr
-
-        pl_module.log("learning_rate", lr, on_step=True, on_epoch=False)
-
-    def _get_lr(self, step):
-        step = max(step, 1)
-        lr = (self.model_dim**-0.5) * min(step**-0.5, step * self.warmup_steps**-1.5)
-        return lr
-
-
 class TransformerDataModule(L.LightningDataModule):
     def __init__(self, config):
         super().__init__()

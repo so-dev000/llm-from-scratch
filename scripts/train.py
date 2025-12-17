@@ -8,7 +8,7 @@ from pytorch_lightning.loggers import WandbLogger
 
 from scripts.config import Config
 from scripts.lightning_module import GPTLightningModule, TransformerLightningModule
-from utils.training_pipeline import TransformerLRScheduler, get_data_module
+from utils.training_pipeline import get_data_module
 
 app = modal.App("llm-training")
 
@@ -56,7 +56,6 @@ def train(config: Config):
         raise ValueError(f"Unknown model type: {config.model.model_type}")
 
     callbacks = [
-        TransformerLRScheduler(config.model.model_dim, config.optimizer.warmup_steps),
         EarlyStopping(
             monitor="val_loss",
             patience=config.training.early_stopping_patience,
