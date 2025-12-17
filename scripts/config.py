@@ -85,7 +85,7 @@ class InferenceConfig:
 
 @dataclass
 class ModalConfig:
-    gpu_type: str = "L4"
+    gpu_type: str = "L40S"
     timeout_hours: int = 12
     volume_name: str = "llm-from-scratch"
     secret_name: str = "wandb-secret"

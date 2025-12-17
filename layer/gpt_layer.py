@@ -30,5 +30,5 @@ class GPTLayer(nn.Module):
         # Pre-LN: Normalize before FFN
         normalized_2 = self.normalizer_2(x)
         feed_forward_out = self.feed_forward(normalized_2)
-        output = x + feed_forward_out  # Redisual
+        output = x + feed_forward_out  # Residual
         return output
