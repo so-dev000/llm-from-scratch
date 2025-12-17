@@ -14,8 +14,10 @@
 cp .env.example .env
 # Edit .env and add: WANDB_API_KEY
 
-# Install Modal
-pip install modal
+# Install dependencies
+uv sync
+
+# Setup Modal
 modal setup
 
 # Create Modal secret
@@ -33,25 +35,56 @@ modal run -d scripts/prepare.py
 ### 2. Train Model (Modal)
 
 ```bash
-modal run -d scripts/train.py --run-name="experiment-1"
+# Transformer (translation)
+modal run -d scripts/train.py --model-type=transformer --run-name="exp-1"
+
+# GPT (language model)
+modal run -d scripts/train.py --model-type=gpt --run-name="gpt-exp-1"
 ```
 
 ### 3. Pull Trained Model (Local)
 
 ```bash
-modal run scripts/pull.py --run-name="experiment-1"
+modal run scripts/pull.py --run-name="exp-1"
 ```
 
 ### 4. Evaluate Model (Local)
 
 ```bash
-python -m scripts.eval --run-name="experiment-1"
+python -m scripts.eval --run-name="exp-1"
 ```
 
 ### 5. Translate (Local)
 
 ```bash
-python -m scripts.translate --run-name="experiment-1"
+python -m scripts.translate --run-name="exp-1"
+```
+
+### 6. Generate (Modal)
+
+```bash
+modal run scripts/generate.py <checkpoint> --model-type=transformer --prompt="Hello"
+```
+
+## Project Structure
+
+```
+scripts/
+  config.py       # Config dataclass with factory methods
+  train.py        # Unified training script (PyTorch Lightning)
+  generate.py     # Text generation / translation
+  eval.py         # Model evaluation
+  translate.py    # Interactive translation
+
+model/
+  transformer.py  # Encoder-Decoder Transformer
+  gpt.py          # GPT (Decoder-only)
+
+utils/
+  training_pipeline.py    # LR scheduler, DataModules
+  decoding_strategy.py    # Beam search, Greedy, Sampling
+  inference_pipeline.py   # Translation / Generation
+  evaluation_pipeline.py  # BLEU, Perplexity
 ```
 
 ## References
