@@ -9,19 +9,16 @@ class DecodingStrategy(ABC):
         self.config = config
 
     @abstractmethod
-    def decode(self, model, src_tokens, src_mask, tokenizer, max_len):
+    def decode(self, model, src_tokens, src_mask, max_len):
         pass
 
 
 class BeamSearch(DecodingStrategy):
-    def decode(self, model, src_tokens, src_mask, tgt_tokenizer, max_len):
+    def decode(self, model, src_tokens, src_mask, max_len):
         device = src_tokens.device
         batch_size = src_tokens.size(0)
         beam_size = self.config.beam_size
-
-        src_mask_expanded = src_mask.unsqueeze(1) & src_mask.unsqueeze(2)
-        encoder_out = model.encode_source(src_tokens, src_mask_expanded)
-
+        context = model.prepare_context(src_tokens, src_mask)
         bos_idx = self.config.bos_idx
         eos_idx = self.config.eos_idx
 
@@ -31,29 +28,26 @@ class BeamSearch(DecodingStrategy):
 
         for _ in range(max_len):
             all_candidates = []
-
             for batch_idx in range(batch_size):
                 candidates = []
-
                 for seq, score in beams[batch_idx]:
                     if seq[-1].item() == eos_idx:
                         candidates.append((seq, score))
                         continue
 
                     tgt_input = seq.unsqueeze(0)
-                    tgt_len = tgt_input.size(1)
-                    tgt_mask = torch.tril(
-                        torch.ones(tgt_len, tgt_len, device=device)
-                    ).bool()
-
-                    logits = model.generate_next_token(
-                        tgt_input,
-                        encoder_out[batch_idx : batch_idx + 1],
-                        tgt_mask=tgt_mask,
-                        src_mask=src_mask[batch_idx : batch_idx + 1],
+                    context_subset = (
+                        context
+                        if context is None
+                        else {
+                            k: v[batch_idx : batch_idx + 1]
+                            if isinstance(v, torch.Tensor)
+                            else v
+                            for k, v in context.items()
+                        }
                     )
+                    logits = model.generate_next_token(tgt_input, context_subset)
                     log_probs = F.log_softmax(logits, dim=-1)
-
                     top_log_probs, top_indices = log_probs.topk(beam_size)
 
                     for k in range(beam_size):
@@ -61,7 +55,6 @@ class BeamSearch(DecodingStrategy):
                             [seq, top_indices[0, k].unsqueeze(0)], dim=0
                         )
                         new_score = score + top_log_probs[0, k].item()
-
                         candidates.append((new_seq, new_score))
 
                 candidates = sorted(
@@ -70,11 +63,8 @@ class BeamSearch(DecodingStrategy):
                     / ((5 + len(x[0])) / 6) ** self.config.length_penalty,
                     reverse=True,
                 )[:beam_size]
-
                 all_candidates.append(candidates)
-
             beams = all_candidates
-
             if all(all(seq[-1].item() == eos_idx for seq, _ in beam) for beam in beams):
                 break
 
@@ -82,51 +72,41 @@ class BeamSearch(DecodingStrategy):
         for beam in beams:
             best_seq, _ = beam[0]
             results.append(best_seq)
-
         return results
 
 
 class GreedyDecoding(DecodingStrategy):
-    def decode(self, model, src_tokens, src_mask, tgt_tokenizer, max_len):
+    def decode(self, model, src_tokens, src_mask, max_len):
         device = src_tokens.device
         batch_size = src_tokens.size(0)
-
-        src_mask_expanded = src_mask.unsqueeze(1) & src_mask.unsqueeze(2)
-        encoder_out = model.encode_source(src_tokens, src_mask_expanded)
-
+        context = model.prepare_context(src_tokens, src_mask)
         bos_idx = self.config.bos_idx
         eos_idx = self.config.eos_idx
-
         results = []
 
         for batch_idx in range(batch_size):
             output_tokens = [bos_idx]
-
             for _ in range(max_len):
                 tgt_input = torch.tensor([output_tokens], device=device)
-                tgt_len = tgt_input.size(1)
-                tgt_mask = torch.tril(
-                    torch.ones(tgt_len, tgt_len, device=device)
-                ).bool()
-
-                logits = model.generate_next_token(
-                    tgt_input,
-                    encoder_out[batch_idx : batch_idx + 1],
-                    tgt_mask=tgt_mask,
-                    src_mask=src_mask[batch_idx : batch_idx + 1],
+                context_subset = (
+                    context
+                    if context is None
+                    else {
+                        k: v[batch_idx : batch_idx + 1]
+                        if isinstance(v, torch.Tensor)
+                        else v
+                        for k, v in context.items()
+                    }
                 )
+                logits = model.generate_next_token(tgt_input, context_subset)
                 next_token = logits.argmax(dim=-1).item()
-
                 output_tokens.append(next_token)
-
                 if next_token == eos_idx:
                     break
-
             results.append(torch.tensor(output_tokens, device=device))
-
         return results
 
 
 class SamplingDecoder(DecodingStrategy):
-    def decode(self, model, src_tokens, src_mask, tokenizer, max_len):
-        raise NotImplementedError("SamplingDecoder not yet implemented")
+    def decode(self, model, src_tokens, src_mask, max_len):
+        raise NotImplementedError()

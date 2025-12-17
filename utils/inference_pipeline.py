@@ -48,9 +48,7 @@ def translate_batch(
         raise ValueError(f"Unknown strategy: {strategy}")
 
     with torch.no_grad():
-        output_seqs = decoder.decode(
-            model, src_tokens, src_mask, tgt_tokenizer, max_output_len
-        )
+        output_seqs = decoder.decode(model, src_tokens, src_mask, max_output_len)
 
     translations = []
     for seq in output_seqs:
