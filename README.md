@@ -1,3 +1,5 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/so-dev000/llm-from-scratch)
+
 # LLM from Scratch
 
 ## Blog
