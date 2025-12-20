@@ -53,27 +53,13 @@ modal run scripts/pull.py --run-name="exp-1"
 #### 4. Evaluate Model (Local)
 
 ```bash
-# Default dataset: ryo0634/bsd_ja_en
-python -m scripts.eval --run-name="exp-1"
-
-# Custom dataset
-python -m scripts.eval --run-name="exp-1" --dataset=your/dataset
+python -m scripts.eval --run-name="exp-1" --model-type=transformer
 ```
 
 #### 5. Interactive Translation (Local)
 
 ```bash
-# Default dataset: ryo0634/bsd_ja_en
-python -m scripts.translate --run-name="exp-1"
-
-# Custom dataset
-python -m scripts.translate --run-name="exp-1" --dataset=your/dataset
-```
-
-#### 6. Generate Translations (Modal)
-
-```bash
-modal run scripts/generate.py --run-name="exp-1" --model-type=transformer --prompt="Hello"
+python -m scripts.inference --run-name="exp-1" --model-type=transformer --mode=local
 ```
 
 ### GPT (Language Model)
@@ -91,36 +77,44 @@ modal run -d scripts/prepare.py --model-type=gpt --dataset=your/dataset --vocab-
 #### 2. Train Model (Modal)
 
 ```bash
-# Not yet implemented
+# Not yet implemented - requires GPTDataModule
 modal run -d scripts/train.py --model-type=gpt --run-name="gpt-exp-1"
 ```
 
-#### 3. Generate Text (Modal)
+#### 3. Evaluate Model (Local)
 
 ```bash
-# Not yet implemented
-modal run scripts/generate.py --run-name="gpt-exp-1" --model-type=gpt --prompt="Once upon a time"
+# Not yet implemented - requires perplexity evaluation
+python -m scripts.eval --run-name="gpt-exp-1" --model-type=gpt
+```
+
+#### 4. Interactive Generation (Local)
+
+```bash
+# Not yet implemented - requires generate_text()
+python -m scripts.inference --run-name="gpt-exp-1" --model-type=gpt --mode=local
 ```
 
 ## Project Structure
 
 ```
 scripts/
-  config.py       # Config dataclass with factory methods
-  train.py        # Unified training script (PyTorch Lightning)
-  generate.py     # Text generation / translation
-  eval.py         # Model evaluation
-  translate.py    # Interactive translation
+  config.py          # Unified config (Transformer & GPT)
+  prepare.py         # Tokenizer preparation (Transformer & GPT)
+  train.py           # Training (Transformer & GPT)
+  eval.py            # Evaluation (BLEU/chrF++ for Transformer, Perplexity for GPT)
+  inference.py       # Interactive/batch inference (Translation & Generation)
+  lightning_module.py # PyTorch Lightning modules
 
 model/
   transformer.py  # Encoder-Decoder Transformer
   gpt.py          # GPT (Decoder-only)
 
 utils/
-  training_pipeline.py    # LR scheduler, DataModules
-  decoding_strategy.py    # Beam search, Greedy, Sampling
-  inference_pipeline.py   # Translation / Generation
-  evaluation_pipeline.py  # BLEU, Perplexity
+  training_pipeline.py  # DataModules (Transformer & GPT)
+  inference_pipeline.py # Translation & Generation pipelines
+  decoding_strategy.py  # Beam search, Greedy, Sampling
+  collate.py            # Data collation
 ```
 
 ## References

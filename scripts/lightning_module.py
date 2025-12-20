@@ -129,66 +129,18 @@ class GPTLightningModule(L.LightningModule):
         self.save_hyperparameters(config.to_dict())
         self.config = config
         self.model = GPT(config.model)
-        self.criterion = nn.CrossEntropyLoss(
-            ignore_index=config.data.pad_idx,
-            label_smoothing=config.training.label_smoothing,
-        )
 
     def forward(self, tokens, mask=None):
-        return self.model(tokens, mask)
-
-    def _shared_step(self, batch, batch_idx):
-        tokens = batch["tokens"]
-        mask = batch.get("mask", None)
-
-        input_tokens = tokens[:, :-1]
-        target_tokens = tokens[:, 1:]
-
-        if mask is not None:
-            input_mask = mask[:, :-1, :-1]
-        else:
-            input_mask = None
-
-        output = self(input_tokens, input_mask)
-        output = output.reshape(-1, output.size(-1))
-        target_tokens = target_tokens.reshape(-1)
-        loss = self.criterion(output, target_tokens)
-        perplexity = torch.exp(loss)
-
-        return loss, perplexity
+        raise NotImplementedError("GPTLightningModule not yet implemented")
 
     def training_step(self, batch, batch_idx):
-        loss, perplexity = self._shared_step(batch, batch_idx)
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log(
-            "train_perplexity", perplexity, on_step=True, on_epoch=True, prog_bar=False
-        )
-        return loss
+        raise NotImplementedError("GPTLightningModule not yet implemented")
 
     def validation_step(self, batch, batch_idx):
-        loss, perplexity = self._shared_step(batch, batch_idx)
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log(
-            "val_perplexity",
-            perplexity,
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-        )
-        return loss
+        raise NotImplementedError("GPTLightningModule not yet implemented")
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        tokens = batch["tokens"]
-        mask = batch.get("mask", None)
-
-        if self.config.inference.beam_size > 1:
-            decoder = BeamSearch(self.config.inference)
-        else:
-            decoder = GreedyDecoding(self.config.inference)
-
-        return decoder.decode(
-            self.model, tokens, mask, self.config.inference.max_gen_len
-        )
+        raise NotImplementedError("GPTLightningModule not yet implemented")
 
     def configure_optimizers(self):
-        return get_optimizer_and_scheduler(self, self.config)
+        raise NotImplementedError("GPTLightningModule not yet implemented")

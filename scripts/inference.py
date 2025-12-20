@@ -1,0 +1,211 @@
+import argparse
+from pathlib import Path
+
+import modal
+import torch
+
+from model.gpt import GPT
+from model.transformer import Transformer
+from scripts.config import Config
+from tokenizer.bpe import BPE
+from utils.inference_pipeline import translate_sentence
+
+app = modal.App("llm-inference")
+
+volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
+
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("torch", "datasets", "regex")
+    .add_local_dir("model", remote_path="/root/model")
+    .add_local_dir("utils", remote_path="/root/utils")
+    .add_local_dir("block", remote_path="/root/block")
+    .add_local_dir("layer", remote_path="/root/layer")
+    .add_local_dir("component", remote_path="/root/component")
+    .add_local_dir("tokenizer", remote_path="/root/tokenizer")
+    .add_local_dir("scripts", remote_path="/root/scripts")
+)
+
+CHECKPOINT_BASE_DIR = "checkpoints/runs"
+
+
+def get_tokenizer_dir(dataset_name):
+    dataset_dir = dataset_name.replace("/", "_")
+    return f"checkpoints/tokenizers/{dataset_dir}"
+
+
+def find_latest_run():
+    runs_path = Path(CHECKPOINT_BASE_DIR)
+    if not runs_path.exists():
+        return None
+
+    run_dirs = [d for d in runs_path.iterdir() if d.is_dir()]
+    if not run_dirs:
+        return None
+
+    return max(run_dirs, key=lambda d: d.stat().st_mtime).name
+
+
+def load_model_and_config(run_name, checkpoint_name, model_type, dataset):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    checkpoint_path = Path(CHECKPOINT_BASE_DIR) / run_name / checkpoint_name
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    hyper_params = checkpoint.get("hyper_parameters", {})
+
+    if model_type == "transformer":
+        config = Config.for_transformer()
+        config.data.dataset_name = dataset
+        config.model.src_vocab_size = hyper_params.get("model.src_vocab_size", 8000)
+        config.model.tgt_vocab_size = hyper_params.get("model.tgt_vocab_size", 8000)
+        model = Transformer(config.model).to(device)
+    elif model_type == "gpt":
+        config = Config.for_gpt()
+        config.data.dataset_name = dataset
+        config.model.vocab_size = hyper_params.get("model.vocab_size", 50257)
+        model = GPT(config.model).to(device)
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+    state_dict = checkpoint["state_dict"]
+    new_state_dict = {}
+    for key, value in state_dict.items():
+        if key.startswith("model."):
+            new_state_dict[key[6:]] = value
+
+    model.load_state_dict(new_state_dict)
+    model.eval()
+
+    return model, config, device
+
+
+@app.function(image=image, gpu="L40S", volumes={"/vol": volume}, timeout=3600)
+def run_inference_remote(run_name, prompts, model_type, dataset, checkpoint, strategy):
+    model, config, device = load_model_and_config(
+        run_name, checkpoint, model_type, dataset
+    )
+
+    tokenizer_dir = get_tokenizer_dir(dataset)
+
+    if model_type == "transformer":
+        src_tokenizer = BPE.load(f"{tokenizer_dir}/en_bpe.pkl")
+        tgt_tokenizer = BPE.load(f"{tokenizer_dir}/ja_bpe.pkl")
+
+        from utils.inference_pipeline import translate_batch
+
+        results = translate_batch(
+            model, prompts, src_tokenizer, tgt_tokenizer, config, strategy
+        )
+    elif model_type == "gpt":
+        raise NotImplementedError("GPT inference not yet implemented")
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+    return results
+
+
+def run_inference_local(run_name, model_type, dataset, checkpoint, interactive):
+    model, config, device = load_model_and_config(
+        run_name, checkpoint, model_type, dataset
+    )
+
+    tokenizer_dir = get_tokenizer_dir(dataset)
+
+    if model_type == "transformer":
+        src_tokenizer = BPE.load(f"{tokenizer_dir}/en_bpe.pkl")
+        tgt_tokenizer = BPE.load(f"{tokenizer_dir}/ja_bpe.pkl")
+
+        if interactive:
+            while True:
+                try:
+                    text = input("EN: ").strip()
+                    if text.lower() in ["exit", "quit", "q"]:
+                        break
+                    if not text:
+                        continue
+
+                    result = translate_sentence(
+                        model, text, src_tokenizer, tgt_tokenizer, config
+                    )
+                    print(f"JA: {result}\n")
+                except KeyboardInterrupt:
+                    break
+    elif model_type == "gpt":
+        raise NotImplementedError("GPT inference not yet implemented")
+
+
+@app.local_entrypoint()
+def main(
+    run_name: str = None,
+    model_type: str = "transformer",
+    dataset: str = None,
+    checkpoint: str = "best_model.ckpt",
+    prompt: str = None,
+    prompts_file: str = None,
+    strategy: str = "beam",
+    mode: str = "remote",
+):
+    run_name = run_name or find_latest_run()
+    if not run_name:
+        return
+
+    if dataset is None:
+        dataset = "ryo0634/bsd_ja_en" if model_type == "transformer" else "openwebtext"
+
+    if mode == "remote":
+        if prompt:
+            prompts = [prompt]
+        elif prompts_file:
+            with open(prompts_file) as f:
+                prompts = [line.strip() for line in f if line.strip()]
+        else:
+            raise ValueError("--prompt or --prompts-file required for remote mode")
+
+        results = run_inference_remote.remote(
+            run_name, prompts, model_type, dataset, checkpoint, strategy
+        )
+
+        for p, result in zip(prompts, results):
+            print(f"Input: {p}")
+            print(f"Output: {result}\n")
+    else:
+        run_inference_local(run_name, model_type, dataset, checkpoint, interactive=True)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run-name", type=str, default=None)
+    parser.add_argument("--model-type", type=str, default="transformer")
+    parser.add_argument("--dataset", type=str, default=None)
+    parser.add_argument("--checkpoint", type=str, default="best_model.ckpt")
+    parser.add_argument("--prompt", type=str, default=None)
+    parser.add_argument("--prompts-file", type=str, default=None)
+    parser.add_argument("--strategy", type=str, default="beam")
+    parser.add_argument(
+        "--mode", type=str, default="local", choices=["local", "remote"]
+    )
+    args = parser.parse_args()
+
+    if args.mode == "local":
+        run_inference_local(
+            args.run_name or find_latest_run(),
+            args.model_type,
+            args.dataset
+            or (
+                "ryo0634/bsd_ja_en"
+                if args.model_type == "transformer"
+                else "openwebtext"
+            ),
+            args.checkpoint,
+            interactive=True,
+        )
+    else:
+        main(
+            args.run_name,
+            args.model_type,
+            args.dataset,
+            args.checkpoint,
+            args.prompt,
+            args.prompts_file,
+            args.strategy,
+            args.mode,
+        )
