@@ -34,7 +34,8 @@ def generate(run_name: str, prompts: list[str], config: Config, strategy: str = 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if config.model.model_type == "transformer":
-        tokenizer_dir = config.tokenizer_dir + "/bsd_en_ja"
+        dataset_dir = config.data.dataset_name.replace("/", "_")
+        tokenizer_dir = f"{config.tokenizer_dir}/{dataset_dir}"
         src_tokenizer = BPE.load(f"{tokenizer_dir}/en_bpe.pkl")
         tgt_tokenizer = BPE.load(f"{tokenizer_dir}/ja_bpe.pkl")
 

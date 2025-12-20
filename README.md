@@ -26,44 +26,80 @@ modal secret create wandb-secret WANDB_API_KEY=your-wandb-key
 
 ## Workflow
 
-### 1. Prepare Data (Modal - First time only)
+### Transformer (Translation Model)
+
+#### 1. Prepare Data (Modal - First time only)
 
 ```bash
-modal run -d scripts/prepare.py
+# Default: ryo0634/bsd_ja_en dataset
+modal run -d scripts/prepare.py --model-type=transformer
+
+# Custom dataset
+modal run -d scripts/prepare.py --model-type=transformer --dataset=your/dataset --vocab-size=8000
 ```
 
-### 2. Train Model (Modal)
+#### 2. Train Model (Modal)
 
 ```bash
-# Transformer (translation)
 modal run -d scripts/train.py --model-type=transformer --run-name="exp-1"
-
-# GPT (language model)
-modal run -d scripts/train.py --model-type=gpt --run-name="gpt-exp-1"
 ```
 
-### 3. Pull Trained Model (Local)
+#### 3. Pull Trained Model (Local)
 
 ```bash
 modal run scripts/pull.py --run-name="exp-1"
 ```
 
-### 4. Evaluate Model (Local)
+#### 4. Evaluate Model (Local)
 
 ```bash
+# Default dataset: ryo0634/bsd_ja_en
 python -m scripts.eval --run-name="exp-1"
+
+# Custom dataset
+python -m scripts.eval --run-name="exp-1" --dataset=your/dataset
 ```
 
-### 5. Translate (Local)
+#### 5. Interactive Translation (Local)
 
 ```bash
+# Default dataset: ryo0634/bsd_ja_en
 python -m scripts.translate --run-name="exp-1"
+
+# Custom dataset
+python -m scripts.translate --run-name="exp-1" --dataset=your/dataset
 ```
 
-### 6. Generate (Modal)
+#### 6. Generate Translations (Modal)
 
 ```bash
-modal run scripts/generate.py --run-name="exp-1" --prompt="Hello"
+modal run scripts/generate.py --run-name="exp-1" --model-type=transformer --prompt="Hello"
+```
+
+### GPT (Language Model)
+
+#### 1. Prepare Data (Modal - First time only)
+
+```bash
+# Default: openwebtext dataset
+modal run -d scripts/prepare.py --model-type=gpt
+
+# Custom dataset
+modal run -d scripts/prepare.py --model-type=gpt --dataset=your/dataset --vocab-size=50257
+```
+
+#### 2. Train Model (Modal)
+
+```bash
+# Not yet implemented
+modal run -d scripts/train.py --model-type=gpt --run-name="gpt-exp-1"
+```
+
+#### 3. Generate Text (Modal)
+
+```bash
+# Not yet implemented
+modal run scripts/generate.py --run-name="gpt-exp-1" --model-type=gpt --prompt="Once upon a time"
 ```
 
 ## Project Structure

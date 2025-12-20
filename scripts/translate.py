@@ -8,8 +8,12 @@ from scripts.config import Config
 from tokenizer.bpe import BPE
 from utils.inference_pipeline import translate_sentence
 
-TOKENIZER_DIR = "checkpoints/tokenizers/bsd_en_ja"
 CHECKPOINT_BASE_DIR = "checkpoints/runs"
+
+
+def get_tokenizer_dir(dataset_name):
+    dataset_dir = dataset_name.replace("/", "_")
+    return f"checkpoints/tokenizers/{dataset_dir}"
 
 
 def find_latest_run():
@@ -28,19 +32,20 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--checkpoint", type=str, default="best_model.ckpt")
+    parser.add_argument("--dataset", type=str, default="ryo0634/bsd_ja_en")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    en_tokenizer_path = f"{TOKENIZER_DIR}/en_bpe.pkl"
-    ja_tokenizer_path = f"{TOKENIZER_DIR}/ja_bpe.pkl"
+    tokenizer_dir = get_tokenizer_dir(args.dataset)
+    en_tokenizer_path = f"{tokenizer_dir}/en_bpe.pkl"
+    ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.pkl"
 
     en_tokenizer = BPE.load(en_tokenizer_path)
     ja_tokenizer = BPE.load(ja_tokenizer_path)
 
     run_name = args.run_name or find_latest_run()
     if not run_name:
-        print("No training runs found")
         return
 
     checkpoint_path = Path(CHECKPOINT_BASE_DIR) / run_name / args.checkpoint
@@ -61,9 +66,6 @@ def main():
             new_state_dict[new_key] = value
 
     model.load_state_dict(new_state_dict)
-
-    print(f"Loaded model from {checkpoint_path}")
-    print("Enter English text to translate (q to quit)")
 
     while True:
         try:

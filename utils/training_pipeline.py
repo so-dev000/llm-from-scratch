@@ -21,19 +21,24 @@ class TransformerDataModule(L.LightningDataModule):
         load_dataset(self.config.data.dataset_name, split="train")
 
     def setup(self, stage: Optional[str] = None):
-        tokenizer_dir = self.config.tokenizer_dir + "/bsd_en_ja"
-        en_tokenizer_path = f"{tokenizer_dir}/en_bpe.pkl"
-        ja_tokenizer_path = f"{tokenizer_dir}/ja_bpe.pkl"
+        dataset_dir = self.config.data.dataset_name.replace("/", "_")
+        tokenizer_dir = f"{self.config.tokenizer_dir}/{dataset_dir}"
 
-        if not os.path.exists(en_tokenizer_path) or not os.path.exists(
-            ja_tokenizer_path
+        src_lang = self.config.data.src_lang
+        tgt_lang = self.config.data.tgt_lang
+
+        src_tokenizer_path = f"{tokenizer_dir}/{src_lang}_bpe.pkl"
+        tgt_tokenizer_path = f"{tokenizer_dir}/{tgt_lang}_bpe.pkl"
+
+        if not os.path.exists(src_tokenizer_path) or not os.path.exists(
+            tgt_tokenizer_path
         ):
             raise FileNotFoundError(
-                "Tokenizers not found. Run scripts/prepare.py first"
+                f"Tokenizers not found at {tokenizer_dir}. Run scripts/prepare.py first"
             )
 
-        self.src_tokenizer = BPE.load(en_tokenizer_path)
-        self.tgt_tokenizer = BPE.load(ja_tokenizer_path)
+        self.src_tokenizer = BPE.load(src_tokenizer_path)
+        self.tgt_tokenizer = BPE.load(tgt_tokenizer_path)
 
         self.config.model.src_vocab_size = self.src_tokenizer.get_vocab_size()
         self.config.model.tgt_vocab_size = self.tgt_tokenizer.get_vocab_size()
@@ -45,9 +50,12 @@ class TransformerDataModule(L.LightningDataModule):
             {"train": train_rest["train"], "val": val_test["train"]}
         )
 
+        src_column = self.config.data.src_column
+        tgt_column = self.config.data.tgt_column
+
         def preprocess_batch(batch):
             src_ids = []
-            for text in batch["en_sentence"]:
+            for text in batch[src_column]:
                 ids = self.src_tokenizer.encode(text, add_special_tokens=True)
                 if len(ids) > self.config.data.max_length:
                     ids = ids[: self.config.data.max_length - 1] + [
@@ -56,7 +64,7 @@ class TransformerDataModule(L.LightningDataModule):
                 src_ids.append(ids)
 
             tgt_ids = []
-            for text in batch["ja_sentence"]:
+            for text in batch[tgt_column]:
                 ids = self.tgt_tokenizer.encode(text, add_special_tokens=True)
                 if len(ids) > self.config.data.max_length:
                     ids = ids[: self.config.data.max_length - 1] + [

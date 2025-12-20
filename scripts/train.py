@@ -98,9 +98,6 @@ def train(config: Config):
 
     volume.commit()
 
-    checkpoint_path = f"{config.checkpoint_dir}/{config.run_name}"
-    print(f"Training complete. Best model saved to {checkpoint_path}")
-
 
 @app.local_entrypoint()
 def main(model_type: str = "transformer", run_name: str = None):
@@ -119,9 +116,5 @@ def main(model_type: str = "transformer", run_name: str = None):
     config.run_name = run_name
 
     config.validate()
-
-    print(f"Starting training run: {run_name}")
-    print(f"Model type: {model_type}")
-    print(f"Config: {config.to_dict()}")
 
     train.remote(config)

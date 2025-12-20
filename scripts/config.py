@@ -13,6 +13,11 @@ class DataConfig:
     prefetch_factor: int = 4
     pin_memory: bool = True
     persistent_workers: bool = True
+    src_lang: str = "en"
+    tgt_lang: str = "ja"
+    src_column: str = "en_sentence"
+    tgt_column: str = "ja_sentence"
+    text_column: str = "text"
 
 
 @dataclass
