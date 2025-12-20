@@ -65,7 +65,9 @@ def load_model_and_config(run_name, checkpoint_name, model_type, dataset):
     return model, config, device
 
 
-def evaluate_transformer(model, config, test_file, tokenizer_dir, output_path):
+def evaluate_transformer(
+    model, config, test_file, tokenizer_dir, output_path, strategy="beam"
+):
     # device = next(model.parameters()).device
 
     src_tokenizer = BPE.load(f"{tokenizer_dir}/en_bpe.pkl")
@@ -85,7 +87,7 @@ def evaluate_transformer(model, config, test_file, tokenizer_dir, output_path):
         en_sentences = [sample["en"] for sample in batch]
 
         translations = translate_batch(
-            model, en_sentences, src_tokenizer, tgt_tokenizer, config, strategy="beam"
+            model, en_sentences, src_tokenizer, tgt_tokenizer, config, strategy=strategy
         )
 
         for sample, ja in zip(batch, translations):
@@ -152,6 +154,9 @@ def main():
     parser.add_argument("--test", type=str, default="data/test/test.csv")
     parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--dataset", type=str, default=None)
+    parser.add_argument(
+        "--strategy", type=str, default="beam", choices=["beam", "greedy"]
+    )
     args = parser.parse_args()
 
     run_name = args.run_name or find_latest_run()
@@ -169,11 +174,14 @@ def main():
 
     tokenizer_dir = get_tokenizer_dir(args.dataset)
     output_path = (
-        args.output or Path(CHECKPOINT_BASE_DIR) / run_name / "eval_results.csv"
+        args.output
+        or Path(CHECKPOINT_BASE_DIR) / run_name / f"eval_results_{args.strategy}.csv"
     )
 
     if args.model_type == "transformer":
-        evaluate_transformer(model, config, args.test, tokenizer_dir, output_path)
+        evaluate_transformer(
+            model, config, args.test, tokenizer_dir, output_path, args.strategy
+        )
     elif args.model_type == "gpt":
         evaluate_gpt(model, config, tokenizer_dir, None)
     else:
