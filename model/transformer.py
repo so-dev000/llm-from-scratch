@@ -65,8 +65,10 @@ class Transformer(nn.Module):
 
     def prepare_context(self, source_tokens, src_mask=None):
         if src_mask is not None:
-            src_mask = src_mask.unsqueeze(1) & src_mask.unsqueeze(2)
-        encoder_out = self.encode(source_tokens, src_mask)
+            encoder_src_mask = src_mask.unsqueeze(1) & src_mask.unsqueeze(2)
+        else:
+            encoder_src_mask = None
+        encoder_out = self.encode(source_tokens, encoder_src_mask)
         return {"encoder_out": encoder_out, "src_mask": src_mask}
 
     def generate_next_token(self, target_tokens, context):

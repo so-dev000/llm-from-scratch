@@ -21,7 +21,7 @@ class OptimizerConfig:
     adam_beta1: float
     adam_beta2: float
     adam_epsilon: float
-    initial_lr: float = 0.0
+    initial_lr: float = 1.0
     optimizer_type: str = "Adam"
     scheduler_type: str = "inverse_sqrt"
 
