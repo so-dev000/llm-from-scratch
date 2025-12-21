@@ -1,6 +1,6 @@
 import torch
 
-from utils.decoding_strategy import BeamSearch, GreedyDecoding
+from utils.decoding_strategy import BeamSearch, GreedyDecoding, SamplingDecoder
 
 
 def translate_sentence(
@@ -44,6 +44,8 @@ def translate_batch(
         decoder = BeamSearch(config.inference)
     elif strategy == "greedy":
         decoder = GreedyDecoding(config.inference)
+    elif strategy == "sampling":
+        decoder = SamplingDecoder(config.inference)
     else:
         raise ValueError(f"Unknown strategy: {strategy}")
 
@@ -95,6 +97,8 @@ def generate_batch(model, prompts, tokenizer, config, strategy="beam"):
         decoder = BeamSearch(config.inference)
     elif strategy == "greedy":
         decoder = GreedyDecoding(config.inference)
+    elif strategy == "sampling":
+        decoder = SamplingDecoder(config.inference)
     else:
         raise ValueError(f"Unknown strategy: {strategy}")
 

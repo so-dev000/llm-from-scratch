@@ -69,7 +69,6 @@ class TrainingConfig:
     early_stopping_patience: int
     gradient_clip_val: float = 1.0
     precision: str = "32-true"
-    accumulate_grad_batches: int = 1
     val_check_interval: float = 1.0
 
 
@@ -197,14 +196,14 @@ class Config:
     def for_gpt(cls, **overrides) -> "Config":
         data_config = DataConfig(
             dataset_name="HuggingFaceFW/fineweb-edu",
-            batch_size=16,
-            max_length=1024,
-            num_workers=4,
+            batch_size=72,
+            max_length=512,
+            num_workers=8,
             pad_idx=0,
             vocab_size=50257,
             text_column="text",
             dataset_config="sample-10BT",
-            prefetch_factor=2,
+            prefetch_factor=4,
         )
 
         optimizer_config = OptimizerConfig(
@@ -227,12 +226,11 @@ class Config:
         )
 
         training_config = TrainingConfig(
-            num_epochs=20,
+            num_epochs=3,
             label_smoothing=0.0,
-            early_stopping_patience=3,
+            early_stopping_patience=2,
             gradient_clip_val=1.0,
-            precision="bf16-mixed",
-            accumulate_grad_batches=16,
+            precision="bf16-true",
         )
 
         inference_config = InferenceConfig(
@@ -246,7 +244,7 @@ class Config:
             max_gen_len=100,
         )
 
-        modal_config = ModalConfig(gpu_type="A10G")
+        modal_config = ModalConfig(gpu_type="H200")
         wandb_config = WandbConfig()
 
         config = cls(

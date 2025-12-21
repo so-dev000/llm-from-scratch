@@ -109,11 +109,7 @@ class TransformerLightningModule(L.LightningModule):
         return loss
 
     def on_validation_epoch_end(self):
-        train_loss = self.trainer.callback_metrics.get("train_loss_epoch")
-        val_loss = self.trainer.callback_metrics.get("val_loss")
-        if train_loss is not None and val_loss is not None and val_loss != 0:
-            loss_ratio = train_loss / val_loss
-            self.log("train_val_loss_ratio", loss_ratio, prog_bar=False, logger=True)
+        pass
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         src_tokens = batch["src"]
@@ -138,11 +134,11 @@ class GPTLightningModule(L.LightningModule):
         self.save_hyperparameters(config.to_dict())
         self.config = config
         self.model = GPT(config.model)
-        self.model = torch.compile(self.model)
         self.criterion = nn.CrossEntropyLoss(
             ignore_index=config.data.pad_idx,
             label_smoothing=config.training.label_smoothing,
         )
+        self.causal_mask_cache = {}
 
     def forward(self, tokens, mask=None):
         return self.model(tokens, mask)
@@ -154,9 +150,15 @@ class GPTLightningModule(L.LightningModule):
         target_tokens = input_ids[:, 1:]
         input_mask = mask[:, :-1]
         batch_size, seq_len = input_tokens.shape
-        causal_mask = torch.tril(
-            torch.ones(seq_len, seq_len, device=input_tokens.device)
-        ).bool()
+
+        if seq_len not in self.causal_mask_cache:
+            self.causal_mask_cache[seq_len] = torch.tril(
+                torch.ones(
+                    seq_len, seq_len, device=input_tokens.device, dtype=torch.bool
+                )
+            )
+        causal_mask = self.causal_mask_cache[seq_len]
+
         combined_mask = (
             causal_mask.unsqueeze(0) & input_mask.unsqueeze(1) & input_mask.unsqueeze(2)
         )
@@ -169,7 +171,7 @@ class GPTLightningModule(L.LightningModule):
     def training_step(self, batch, batch_idx):
         loss = self._shared_step(batch, batch_idx)
         self.log(
-            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
+            "train_loss", loss, on_step=True, on_epoch=False, prog_bar=True, logger=True
         )
         return loss
 
@@ -181,11 +183,7 @@ class GPTLightningModule(L.LightningModule):
         return loss
 
     def on_validation_epoch_end(self):
-        train_loss = self.trainer.callback_metrics.get("train_loss_epoch")
-        val_loss = self.trainer.callback_metrics.get("val_loss")
-        if train_loss is not None and val_loss is not None and val_loss != 0:
-            loss_ratio = train_loss / val_loss
-            self.log("train_val_loss_ratio", loss_ratio, prog_bar=False, logger=True)
+        pass
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         input_ids = batch["input_ids"]

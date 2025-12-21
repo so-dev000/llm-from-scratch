@@ -109,7 +109,9 @@ def run_inference_remote(run_name, prompts, model_type, dataset, checkpoint, str
     return results
 
 
-def run_inference_local(run_name, model_type, dataset, checkpoint, interactive):
+def run_inference_local(
+    run_name, model_type, dataset, checkpoint, interactive, strategy="sampling"
+):
     model, config, device = load_model_and_config(
         run_name, checkpoint, model_type, dataset
     )
@@ -149,7 +151,7 @@ def run_inference_local(run_name, model_type, dataset, checkpoint, interactive):
                         continue
 
                     result = generate_text(
-                        model, text, tokenizer, config, strategy="beam"
+                        model, text, tokenizer, config, strategy=strategy
                     )
                     print(f"Generated: {result}\n")
                 except KeyboardInterrupt:
@@ -164,7 +166,7 @@ def main(
     checkpoint: str = "best_model.ckpt",
     prompt: str = None,
     prompts_file: str = None,
-    strategy: str = "beam",
+    strategy: str = "sampling",
     mode: str = "remote",
 ):
     run_name = run_name or find_latest_run()
@@ -206,7 +208,7 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint", type=str, default="best_model.ckpt")
     parser.add_argument("--prompt", type=str, default=None)
     parser.add_argument("--prompts-file", type=str, default=None)
-    parser.add_argument("--strategy", type=str, default="beam")
+    parser.add_argument("--strategy", type=str, default="sampling")
     parser.add_argument(
         "--mode", type=str, default="local", choices=["local", "remote"]
     )
@@ -227,6 +229,7 @@ if __name__ == "__main__":
             dataset,
             args.checkpoint,
             interactive=True,
+            strategy=args.strategy,
         )
     else:
         main(

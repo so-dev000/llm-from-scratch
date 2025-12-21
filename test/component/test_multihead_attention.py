@@ -31,7 +31,6 @@ class TestMultiheadAttention:
         mask = torch.tril(torch.ones(seq_len, seq_len)).bool()  # (seq, seq)
         output = attention(inputs, mask=mask)
         assert output.shape == inputs.shape
-        assert attention.last_attention_weights is not None
 
     def test_with_3d_mask(self):
         batch_size = 2

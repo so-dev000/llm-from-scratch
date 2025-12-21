@@ -57,12 +57,14 @@ def prepare_dataset(config: Config):
 
 @app.function(
     image=image,
-    gpu="L40S",
+    gpu="H200",
     volumes={"/vol": volume},
     timeout=3600 * 12,
     secrets=[modal.Secret.from_name("wandb-secret")],
 )
 def train(config: Config):
+    os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
+
     torch.set_float32_matmul_precision("high")
     torch.backends.cudnn.benchmark = True
 
@@ -111,9 +113,8 @@ def train(config: Config):
         logger=logger,
         gradient_clip_val=config.training.gradient_clip_val,
         precision=config.training.precision,
-        accumulate_grad_batches=config.training.accumulate_grad_batches,
         val_check_interval=config.training.val_check_interval,
-        log_every_n_steps=1,
+        log_every_n_steps=50,
         enable_progress_bar=True,
         enable_model_summary=True,
     )
