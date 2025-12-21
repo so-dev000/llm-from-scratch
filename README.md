@@ -69,17 +69,14 @@ python -m scripts.inference --run-name="exp-1" --model-type=transformer --mode=l
 #### 1. Prepare Data (Modal - First time only)
 
 ```bash
-# Default: openwebtext dataset
+# Default: FineWeb-Edu dataset (sample-10BT, 1M samples for tokenizer)
 modal run -d scripts/prepare.py --model-type=gpt
 
-# Custom dataset
-modal run -d scripts/prepare.py --model-type=gpt --dataset=your/dataset --vocab-size=50257
 ```
 
 #### 2. Train Model (Modal)
 
 ```bash
-# Not yet implemented - requires GPTDataModule
 modal run -d scripts/train.py --model-type=gpt --run-name="gpt-exp-1"
 ```
 

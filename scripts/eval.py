@@ -164,9 +164,11 @@ def main():
         return
 
     if args.dataset is None:
-        args.dataset = (
-            "ryo0634/bsd_ja_en" if args.model_type == "transformer" else "openwebtext"
-        )
+        if args.model_type == "transformer":
+            config = Config.for_transformer()
+        else:
+            config = Config.for_gpt()
+        args.dataset = config.data.dataset_name
 
     model, config, device = load_model_and_config(
         run_name, args.checkpoint, args.model_type, args.dataset

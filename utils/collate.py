@@ -19,3 +19,10 @@ def collate(batch, pad_id=0):
         "src_mask": src_mask,
         "tgt_mask": tgt_mask,
     }
+
+
+def collate_gpt(batch, pad_id=0):
+    input_tensors = [item["input_ids"] for item in batch]
+    padded = pad_sequence(input_tensors, batch_first=True, padding_value=pad_id)
+    mask = padded != pad_id
+    return {"input_ids": padded, "mask": mask}

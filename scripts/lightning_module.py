@@ -129,18 +129,59 @@ class GPTLightningModule(L.LightningModule):
         self.save_hyperparameters(config.to_dict())
         self.config = config
         self.model = GPT(config.model)
+        self.criterion = nn.CrossEntropyLoss(
+            ignore_index=config.data.pad_idx,
+            label_smoothing=config.training.label_smoothing,
+        )
 
     def forward(self, tokens, mask=None):
-        raise NotImplementedError("GPTLightningModule not yet implemented")
+        return self.model(tokens, mask)
+
+    def _shared_step(self, batch, batch_idx):
+        input_ids = batch["input_ids"]
+        mask = batch["mask"]
+        input_tokens = input_ids[:, :-1]
+        target_tokens = input_ids[:, 1:]
+        input_mask = mask[:, :-1]
+        batch_size, seq_len = input_tokens.shape
+        causal_mask = torch.tril(
+            torch.ones(seq_len, seq_len, device=input_tokens.device)
+        ).bool()
+        combined_mask = (
+            causal_mask.unsqueeze(0) & input_mask.unsqueeze(1) & input_mask.unsqueeze(2)
+        )
+        logits = self(input_tokens, combined_mask)
+        logits_flat = logits.reshape(-1, logits.size(-1))
+        target_flat = target_tokens.reshape(-1)
+        loss = self.criterion(logits_flat, target_flat)
+        return loss
 
     def training_step(self, batch, batch_idx):
-        raise NotImplementedError("GPTLightningModule not yet implemented")
+        loss = self._shared_step(batch, batch_idx)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
 
     def validation_step(self, batch, batch_idx):
-        raise NotImplementedError("GPTLightningModule not yet implemented")
+        loss = self._shared_step(batch, batch_idx)
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        raise NotImplementedError("GPTLightningModule not yet implemented")
+        input_ids = batch["input_ids"]
+        max_gen_len = self.config.inference.max_gen_len
+        generated = input_ids[:, :1]
+        for _ in range(max_gen_len - 1):
+            seq_len = generated.size(1)
+            mask = torch.tril(
+                torch.ones(seq_len, seq_len, device=generated.device)
+            ).bool()
+            mask = mask.unsqueeze(0).expand(generated.size(0), -1, -1)
+            logits = self(generated, mask)
+            next_token = logits[:, -1, :].argmax(dim=-1, keepdim=True)
+            generated = torch.cat([generated, next_token], dim=1)
+            if (next_token == self.config.inference.eos_idx).all():
+                break
+        return generated
 
     def configure_optimizers(self):
-        raise NotImplementedError("GPTLightningModule not yet implemented")
+        return get_optimizer_and_scheduler(self, self.config)

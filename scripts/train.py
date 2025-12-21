@@ -23,6 +23,7 @@ image = (
         "wandb",
         "datasets",
         "regex",
+        "tokenizers",
     )
     .add_local_dir("model", remote_path="/root/model")
     .add_local_dir("utils", remote_path="/root/utils")

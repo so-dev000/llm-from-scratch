@@ -1,6 +1,11 @@
 import os
+from itertools import islice
 
 import modal
+from config import Config
+from datasets import load_dataset
+from tokenizers import Tokenizer, decoders, models, pre_tokenizers, processors, trainers
+from tqdm import tqdm
 
 app = modal.App("llm-data-preparation")
 
@@ -8,8 +13,9 @@ volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("regex", "tqdm", "datasets")
+    .pip_install("regex", "tqdm", "datasets", "tokenizers")
     .add_local_dir("tokenizer", remote_path="/root/llm-from-scratch/tokenizer")
+    .add_local_file("scripts/config.py", remote_path="/root/config.py")
 )
 
 GPT2_PATTERN = (
@@ -19,61 +25,71 @@ GPT2_PATTERN = (
 
 
 def prepare_transformer_tokenizers(
-    dataset_name="ryo0634/bsd_ja_en",
-    vocab_size=8000,
-    src_lang="en",
-    tgt_lang="ja",
-    src_column="en_sentence",
-    tgt_column="ja_sentence",
+    dataset_name,
+    vocab_size,
+    src_lang,
+    tgt_lang,
+    src_column,
+    tgt_column,
 ):
-    from datasets import load_dataset
-
     from tokenizer.bpe import BPE
 
     dataset_dir = dataset_name.replace("/", "_")
     tokenizer_dir = f"data/tokenizers/{dataset_dir}"
-
     src_tokenizer_path = f"{tokenizer_dir}/{src_lang}_bpe.pkl"
     tgt_tokenizer_path = f"{tokenizer_dir}/{tgt_lang}_bpe.pkl"
-
-    if os.path.exists(src_tokenizer_path) and os.path.exists(tgt_tokenizer_path):
-        return tokenizer_dir
-
     dataset = load_dataset(dataset_name, split="train")
-
-    src_texts = [ex[src_column] for ex in dataset]
+    src_texts = [
+        ex[src_column] for ex in tqdm(dataset, desc=f"Loading {src_lang} texts")
+    ]
     src_tokenizer = BPE(pattern=GPT2_PATTERN if src_lang == "en" else None)
     src_tokenizer.train(src_texts, vocab_size=vocab_size)
-
-    tgt_texts = [ex[tgt_column] for ex in dataset]
+    tgt_texts = [
+        ex[tgt_column] for ex in tqdm(dataset, desc=f"Loading {tgt_lang} texts")
+    ]
     tgt_tokenizer = BPE(pattern=None)
     tgt_tokenizer.train(tgt_texts, vocab_size=vocab_size)
-
     os.makedirs(tokenizer_dir, exist_ok=True)
     src_tokenizer.save(src_tokenizer_path)
     tgt_tokenizer.save(tgt_tokenizer_path)
-
     return tokenizer_dir
 
 
+@app.function(image=image, volumes={"/vol": volume}, timeout=3600)
 def prepare_gpt_tokenizer(
-    dataset_name="openwebtext",
-    vocab_size=50257,
-    text_column="text",
-    sample_size=100000,
+    dataset_name,
+    dataset_config,
+    vocab_size,
+    text_column,
 ):
-    raise NotImplementedError("GPT tokenizer preparation not yet implemented")
+    dataset_dir = dataset_name.replace("/", "_")
 
+    tokenizer_dir = f"/vol/tokenizers/{dataset_dir}"
+    tokenizer_path = f"{tokenizer_dir}/tokenizer.json"
 
-@app.function(image=image, volumes={"/vol": volume}, timeout=600)
-def upload_files(local_files):
-    for local_content, remote_path in local_files:
-        remote_dir = os.path.dirname(remote_path)
-        os.makedirs(remote_dir, exist_ok=True)
-        with open(remote_path, "wb") as f:
-            f.write(local_content)
+    num_samples = 1_000_000
+    dataset = load_dataset(dataset_name, dataset_config, split="train", streaming=True)
 
+    def text_iterator():
+        for example in tqdm(
+            islice(dataset, num_samples), total=num_samples, desc="Loading texts"
+        ):
+            yield example[text_column]
+
+    tokenizer = Tokenizer(models.BPE())
+    tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+    trainer = trainers.BpeTrainer(
+        vocab_size=vocab_size,
+        special_tokens=["<PAD>", "<UNK>", "<BOS>", "<EOS>"],
+        show_progress=False,
+    )
+    tokenizer.train_from_iterator(text_iterator(), trainer=trainer)
+    tokenizer.decoder = decoders.ByteLevel()
+    tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+    os.makedirs(tokenizer_dir, exist_ok=True)
+    tokenizer.save(tokenizer_path)
     volume.commit()
+    return tokenizer_dir
 
 
 @app.local_entrypoint()
@@ -81,36 +97,32 @@ def main(
     model_type: str = "transformer",
     dataset: str = None,
     vocab_size: int = None,
+    dataset_config: str = None,
 ):
     if model_type == "transformer":
-        dataset_name = dataset or "ryo0634/bsd_ja_en"
-        vs = vocab_size or 8000
-        local_dir = prepare_transformer_tokenizers(
-            dataset_name=dataset_name,
-            vocab_size=vs,
-            src_lang="en",
-            tgt_lang="ja",
-            src_column="en_sentence",
-            tgt_column="ja_sentence",
-        )
+        config = Config.for_transformer()
     elif model_type == "gpt":
-        dataset_name = dataset or "openwebtext"
-        vs = vocab_size or 50257
-        local_dir = prepare_gpt_tokenizer(
-            dataset_name=dataset_name,
-            vocab_size=vs,
-            text_column="text",
-            sample_size=100000,
-        )
+        config = Config.for_gpt()
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
-    dataset_dir = dataset_name.replace("/", "_")
-    files_to_upload = []
-    for filename in os.listdir(local_dir):
-        local_path = os.path.join(local_dir, filename)
-        remote_path = f"/vol/tokenizers/{dataset_dir}/{filename}"
-        with open(local_path, "rb") as f:
-            files_to_upload.append((f.read(), remote_path))
+    dataset_name = dataset or config.data.dataset_name
+    vocab_size_value = vocab_size or config.data.vocab_size
 
-    upload_files.remote(files_to_upload)
+    if model_type == "transformer":
+        prepare_transformer_tokenizers(
+            dataset_name=dataset_name,
+            vocab_size=vocab_size_value,
+            src_lang=config.data.src_lang,
+            tgt_lang=config.data.tgt_lang,
+            src_column=config.data.src_column,
+            tgt_column=config.data.tgt_column,
+        )
+    elif model_type == "gpt":
+        dataset_config_value = dataset_config or config.data.dataset_config
+        prepare_gpt_tokenizer.remote(
+            dataset_name=dataset_name,
+            dataset_config=dataset_config_value,
+            vocab_size=vocab_size_value,
+            text_column=config.data.text_column,
+        )

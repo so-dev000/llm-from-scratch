@@ -149,7 +149,11 @@ def main(
         return
 
     if dataset is None:
-        dataset = "ryo0634/bsd_ja_en" if model_type == "transformer" else "openwebtext"
+        if model_type == "transformer":
+            config = Config.for_transformer()
+        else:
+            config = Config.for_gpt()
+        dataset = config.data.dataset_name
 
     if mode == "remote":
         if prompt:
@@ -186,15 +190,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.mode == "local":
+        dataset = args.dataset
+        if dataset is None:
+            if args.model_type == "transformer":
+                config = Config.for_transformer()
+            else:
+                config = Config.for_gpt()
+            dataset = config.data.dataset_name
+
         run_inference_local(
             args.run_name or find_latest_run(),
             args.model_type,
-            args.dataset
-            or (
-                "ryo0634/bsd_ja_en"
-                if args.model_type == "transformer"
-                else "openwebtext"
-            ),
+            dataset,
             args.checkpoint,
             interactive=True,
         )

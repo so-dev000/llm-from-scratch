@@ -18,6 +18,7 @@ class DataConfig:
     src_column: str = "en_sentence"
     tgt_column: str = "ja_sentence"
     text_column: str = "text"
+    dataset_config: str = None
 
 
 @dataclass
@@ -195,11 +196,14 @@ class Config:
     @classmethod
     def for_gpt(cls, **overrides) -> "Config":
         data_config = DataConfig(
-            dataset_name="openwebtext",
+            dataset_name="HuggingFaceFW/fineweb-edu",
             batch_size=32,
             max_length=1024,
             num_workers=8,
             pad_idx=0,
+            vocab_size=50257,
+            text_column="text",
+            dataset_config="sample-10BT",
         )
 
         optimizer_config = OptimizerConfig(
