@@ -70,7 +70,8 @@ class GPT(nn.Module):
         return output
 
     def prepare_context(self, tokens, mask=None):
-        raise NotImplementedError()
+        return None
 
     def generate_next_token(self, tokens, context=None):
-        raise NotImplementedError()
+        logits = self.forward(tokens, mask=None)
+        return logits[:, -1, :]

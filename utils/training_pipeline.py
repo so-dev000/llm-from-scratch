@@ -1,9 +1,12 @@
 import os
+from itertools import islice
 from typing import Optional
 
 import pytorch_lightning as L
-from datasets import DatasetDict, load_dataset
+from datasets import Dataset, DatasetDict, load_dataset
+from tokenizers import Tokenizer
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from tokenizer.bpe import BPE
 from utils.collate import collate
@@ -116,8 +119,6 @@ class GPTDataModule(L.LightningDataModule):
         pass
 
     def setup(self, stage: Optional[str] = None):
-        from tokenizers import Tokenizer
-
         dataset_dir = self.config.data.dataset_name.replace("/", "_")
         tokenizer_path = f"{self.config.tokenizer_dir}/{dataset_dir}/tokenizer.json"
 
@@ -129,12 +130,22 @@ class GPTDataModule(L.LightningDataModule):
         self.tokenizer = Tokenizer.from_file(tokenizer_path)
         self.config.model.vocab_size = self.tokenizer.get_vocab_size()
 
+        num_samples = 1_000_000
         dataset = load_dataset(
             self.config.data.dataset_name,
             self.config.data.dataset_config,
             split="train",
+            streaming=True,
         )
 
+        dataset_list = list(
+            tqdm(
+                islice(dataset, num_samples),
+                total=num_samples,
+                desc="Loading training data",
+            )
+        )
+        dataset = Dataset.from_list(dataset_list)
         split_data = dataset.train_test_split(test_size=0.05, seed=42)
         text_column = self.config.data.text_column
 

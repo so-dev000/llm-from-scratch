@@ -22,9 +22,15 @@ class BeamSearch(DecodingStrategy):
         bos_idx = self.config.bos_idx
         eos_idx = self.config.eos_idx
 
-        beams = [
-            [(torch.tensor([bos_idx], device=device), 0.0)] for _ in range(batch_size)
-        ]
+        has_prompt = src_tokens.size(1) > 0 and (src_tokens != 0).any()
+
+        if has_prompt:
+            beams = [[(src_tokens[i], 0.0)] for i in range(batch_size)]
+        else:
+            beams = [
+                [(torch.tensor([bos_idx], device=device), 0.0)]
+                for _ in range(batch_size)
+            ]
 
         for _ in range(max_len):
             all_candidates = []
@@ -84,8 +90,14 @@ class GreedyDecoding(DecodingStrategy):
         eos_idx = self.config.eos_idx
         results = []
 
+        has_prompt = src_tokens.size(1) > 0 and (src_tokens != 0).any()
+
         for batch_idx in range(batch_size):
-            output_tokens = [bos_idx]
+            if has_prompt:
+                output_tokens = src_tokens[batch_idx].tolist()
+            else:
+                output_tokens = [bos_idx]
+
             for _ in range(max_len):
                 tgt_input = torch.tensor([output_tokens], device=device)
                 context_subset = (

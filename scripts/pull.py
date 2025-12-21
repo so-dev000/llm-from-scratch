@@ -1,6 +1,9 @@
 import os
+import tarfile
+from pathlib import Path
 
 import modal
+from tqdm import tqdm
 
 app = modal.App("llm-pull")
 
@@ -13,9 +16,6 @@ CHECKPOINT_DIR = "/vol/runs"
 
 @app.function(image=image, volumes={"/vol": volume})
 def pull_tokenizers():
-    import tarfile
-    from pathlib import Path
-
     tokenizer_dir = Path("/vol/tokenizers")
     if not tokenizer_dir.exists():
         raise FileNotFoundError("No tokenizers found in Modal Volume")
@@ -31,8 +31,6 @@ def pull_tokenizers():
 
 @app.function(image=image, volumes={"/vol": volume})
 def pull_best_model(run_name: str):
-    from pathlib import Path
-
     best_model_path = Path(f"{CHECKPOINT_DIR}/{run_name}/best_model.ckpt")
     if not best_model_path.exists():
         raise FileNotFoundError(f"best_model.ckpt not found for run '{run_name}'")
@@ -43,11 +41,6 @@ def pull_best_model(run_name: str):
 
 @app.local_entrypoint()
 def main(run_name: str = None):
-    import tarfile
-    from pathlib import Path
-
-    from tqdm import tqdm
-
     tokenizers_data = pull_tokenizers.remote()
 
     tokenizers_path = "checkpoints/tokenizers.tar.gz"

@@ -30,15 +30,18 @@ class TestGPT:
 
         assert output.shape == (batch_size, seq_len, config.vocab_size)
 
-    def test_inference_methods_stubs(self, config):
+    def test_inference_methods(self, config):
         model = GPT(config)
+        model.eval()
         input_ids = torch.randint(0, config.vocab_size, (1, 5))
 
-        with pytest.raises(NotImplementedError):
-            model.prepare_context(input_ids)
+        context = model.prepare_context(input_ids)
+        assert context is None
 
-        with pytest.raises(NotImplementedError):
-            model.generate_next_token(input_ids, None)
+        with torch.no_grad():
+            next_token_logits = model.generate_next_token(input_ids, None)
+
+        assert next_token_logits.shape == (1, config.vocab_size)
 
     def test_causal_masking_logic(self, config):
         model = GPT(config)

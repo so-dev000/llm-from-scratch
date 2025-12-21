@@ -3,12 +3,18 @@ from pathlib import Path
 
 import modal
 import torch
+from tokenizers import Tokenizer
 
 from model.gpt import GPT
 from model.transformer import Transformer
 from scripts.config import Config
 from tokenizer.bpe import BPE
-from utils.inference_pipeline import translate_sentence
+from utils.inference_pipeline import (
+    generate_batch,
+    generate_text,
+    translate_batch,
+    translate_sentence,
+)
 
 app = modal.App("llm-inference")
 
@@ -90,13 +96,13 @@ def run_inference_remote(run_name, prompts, model_type, dataset, checkpoint, str
         src_tokenizer = BPE.load(f"{tokenizer_dir}/en_bpe.pkl")
         tgt_tokenizer = BPE.load(f"{tokenizer_dir}/ja_bpe.pkl")
 
-        from utils.inference_pipeline import translate_batch
-
         results = translate_batch(
             model, prompts, src_tokenizer, tgt_tokenizer, config, strategy
         )
     elif model_type == "gpt":
-        raise NotImplementedError("GPT inference not yet implemented")
+        tokenizer = Tokenizer.from_file(f"{tokenizer_dir}/tokenizer.json")
+
+        results = generate_batch(model, prompts, tokenizer, config, strategy)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -130,7 +136,24 @@ def run_inference_local(run_name, model_type, dataset, checkpoint, interactive):
                 except KeyboardInterrupt:
                     break
     elif model_type == "gpt":
-        raise NotImplementedError("GPT inference not yet implemented")
+        tokenizer = Tokenizer.from_file(f"{tokenizer_dir}/tokenizer.json")
+
+        if interactive:
+            print("GPT Interactive Mode (type 'exit', 'quit', or 'q' to exit)")
+            while True:
+                try:
+                    text = input("Prompt: ").strip()
+                    if text.lower() in ["exit", "quit", "q"]:
+                        break
+                    if not text:
+                        continue
+
+                    result = generate_text(
+                        model, text, tokenizer, config, strategy="beam"
+                    )
+                    print(f"Generated: {result}\n")
+                except KeyboardInterrupt:
+                    break
 
 
 @app.local_entrypoint()

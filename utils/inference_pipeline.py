@@ -65,9 +65,53 @@ def translate_batch(
     return translations
 
 
-def generate_text(model, prompt, tokenizer, config, strategy="sampling"):
-    raise NotImplementedError()
+def generate_text(model, prompt, tokenizer, config, strategy="beam"):
+    results = generate_batch(model, [prompt], tokenizer, config, strategy)
+    return results[0]
 
 
-def generate_batch(model, prompts, tokenizer, config, strategy="sampling"):
-    raise NotImplementedError()
+def generate_batch(model, prompts, tokenizer, config, strategy="beam"):
+    model.eval()
+    device = next(model.parameters()).device
+
+    prompt_ids = []
+    for prompt in prompts:
+        encoding = tokenizer.encode(prompt)
+        ids = encoding.ids
+        if len(ids) > config.data.max_length:
+            ids = ids[: config.data.max_length]
+        prompt_ids.append(ids)
+
+    max_prompt_len = max(len(ids) for ids in prompt_ids)
+    prompt_tokens = torch.zeros(len(prompts), max_prompt_len, dtype=torch.long)
+
+    for i, ids in enumerate(prompt_ids):
+        prompt_tokens[i, : len(ids)] = torch.tensor(ids)
+
+    prompt_tokens = prompt_tokens.to(device)
+    max_output_len = config.inference.max_gen_len
+
+    if strategy == "beam":
+        decoder = BeamSearch(config.inference)
+    elif strategy == "greedy":
+        decoder = GreedyDecoding(config.inference)
+    else:
+        raise ValueError(f"Unknown strategy: {strategy}")
+
+    with torch.no_grad():
+        output_seqs = decoder.decode(model, prompt_tokens, None, max_output_len)
+
+    generations = []
+    for i, seq in enumerate(output_seqs):
+        tokens = seq.tolist()
+        prompt_len = len(prompt_ids[i])
+        generated_tokens = tokens[prompt_len:]
+
+        if config.inference.eos_idx in generated_tokens:
+            eos_pos = generated_tokens.index(config.inference.eos_idx)
+            generated_tokens = generated_tokens[:eos_pos]
+
+        generation = tokenizer.decode(generated_tokens)
+        generations.append(generation)
+
+    return generations
