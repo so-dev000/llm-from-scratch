@@ -64,6 +64,7 @@ def prepare_dataset(config: Config):
 )
 def train(config: Config):
     torch.set_float32_matmul_precision("high")
+    torch.backends.cudnn.benchmark = True
 
     data_module = get_data_module(config)
     data_module.load_from_cache()

@@ -138,6 +138,7 @@ class GPTLightningModule(L.LightningModule):
         self.save_hyperparameters(config.to_dict())
         self.config = config
         self.model = GPT(config.model)
+        self.model = torch.compile(self.model)
         self.criterion = nn.CrossEntropyLoss(
             ignore_index=config.data.pad_idx,
             label_smoothing=config.training.label_smoothing,
