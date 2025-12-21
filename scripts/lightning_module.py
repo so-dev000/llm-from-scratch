@@ -103,8 +103,17 @@ class TransformerLightningModule(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         loss = self._shared_step(batch, batch_idx)
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True
+        )
         return loss
+
+    def on_validation_epoch_end(self):
+        train_loss = self.trainer.callback_metrics.get("train_loss_epoch")
+        val_loss = self.trainer.callback_metrics.get("val_loss")
+        if train_loss is not None and val_loss is not None and val_loss != 0:
+            loss_ratio = train_loss / val_loss
+            self.log("train_val_loss_ratio", loss_ratio, prog_bar=False, logger=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         src_tokens = batch["src"]
@@ -158,13 +167,24 @@ class GPTLightningModule(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss = self._shared_step(batch, batch_idx)
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log(
+            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
+        )
         return loss
 
     def validation_step(self, batch, batch_idx):
         loss = self._shared_step(batch, batch_idx)
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True
+        )
         return loss
+
+    def on_validation_epoch_end(self):
+        train_loss = self.trainer.callback_metrics.get("train_loss_epoch")
+        val_loss = self.trainer.callback_metrics.get("val_loss")
+        if train_loss is not None and val_loss is not None and val_loss != 0:
+            loss_ratio = train_loss / val_loss
+            self.log("train_val_loss_ratio", loss_ratio, prog_bar=False, logger=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         input_ids = batch["input_ids"]
@@ -184,4 +204,53 @@ class GPTLightningModule(L.LightningModule):
         return generated
 
     def configure_optimizers(self):
-        return get_optimizer_and_scheduler(self, self.config)
+        # Separate parameters for weight decay
+        decay = set()
+        no_decay = set()
+
+        for name, param in self.named_parameters():
+            if param.requires_grad:
+                if any(nd in name for nd in ["bias", "LayerNorm", "norm"]):
+                    no_decay.add(name)
+                else:
+                    decay.add(name)
+
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        optim_groups = [
+            {"params": [param_dict[pn] for pn in sorted(decay)], "weight_decay": 0.01},
+            {
+                "params": [param_dict[pn] for pn in sorted(no_decay)],
+                "weight_decay": 0.0,
+            },
+        ]
+
+        optimizer = torch.optim.AdamW(
+            optim_groups,
+            lr=self.config.optimizer.initial_lr,
+            betas=(self.config.optimizer.adam_beta1, self.config.optimizer.adam_beta2),
+            eps=self.config.optimizer.adam_epsilon,
+        )
+
+        # GPT-2: Cosine annealing scheduler
+        total_steps = self.trainer.estimated_stepping_batches
+        warmup_steps = self.config.optimizer.warmup_steps
+
+        def lr_lambda(step):
+            if step < warmup_steps:
+                # Linear warmup
+                return step / warmup_steps
+            else:
+                # Cosine annealing
+                progress = (step - warmup_steps) / (total_steps - warmup_steps)
+                return 0.5 * (1 + torch.cos(torch.tensor(progress * 3.14159265359)))
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1,
+            },
+        }

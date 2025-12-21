@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 import modal
@@ -37,6 +38,25 @@ image = (
 
 @app.function(
     image=image,
+    volumes={"/vol": volume},
+    timeout=1800,
+)
+def prepare_dataset(config: Config):
+    dataset_dir = config.data.dataset_name.replace("/", "_")
+    cache_path = f"/vol/processed/{dataset_dir}"
+
+    if os.path.exists(cache_path):
+        print(f"Data already prepared at {cache_path}, skipping...")
+        return
+
+    data_module = get_data_module(config)
+    data_module.prepare_data()
+    data_module.setup(stage="fit")
+    volume.commit()
+
+
+@app.function(
+    image=image,
     gpu="L40S",
     volumes={"/vol": volume},
     timeout=3600 * 12,
@@ -46,8 +66,7 @@ def train(config: Config):
     torch.set_float32_matmul_precision("high")
 
     data_module = get_data_module(config)
-    data_module.prepare_data()
-    data_module.setup(stage="fit")
+    data_module.load_from_cache()
 
     if config.model.model_type == "transformer":
         pl_module = TransformerLightningModule(config)
@@ -79,7 +98,9 @@ def train(config: Config):
             entity=config.wandb.entity,
             name=config.run_name,
             log_model=config.wandb.log_model,
+            save_dir="/vol/wandb",
         )
+        logger.experiment.config.update(config.to_dict())
     else:
         logger = None
 
@@ -91,6 +112,7 @@ def train(config: Config):
         precision=config.training.precision,
         accumulate_grad_batches=config.training.accumulate_grad_batches,
         val_check_interval=config.training.val_check_interval,
+        log_every_n_steps=1,
         enable_progress_bar=True,
         enable_model_summary=True,
     )
@@ -118,4 +140,5 @@ def main(model_type: str = "transformer", run_name: str = None):
 
     config.validate()
 
+    prepare_dataset.remote(config)
     train.remote(config)

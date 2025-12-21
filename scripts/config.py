@@ -197,13 +197,14 @@ class Config:
     def for_gpt(cls, **overrides) -> "Config":
         data_config = DataConfig(
             dataset_name="HuggingFaceFW/fineweb-edu",
-            batch_size=32,
+            batch_size=16,
             max_length=1024,
-            num_workers=8,
+            num_workers=4,
             pad_idx=0,
             vocab_size=50257,
             text_column="text",
             dataset_config="sample-10BT",
+            prefetch_factor=2,
         )
 
         optimizer_config = OptimizerConfig(
@@ -211,6 +212,8 @@ class Config:
             adam_beta1=0.9,
             adam_beta2=0.999,
             adam_epsilon=1e-8,
+            optimizer_type="AdamW",
+            initial_lr=2.5e-4,
         )
 
         model_config = GPTModelConfig(
@@ -228,7 +231,8 @@ class Config:
             label_smoothing=0.0,
             early_stopping_patience=3,
             gradient_clip_val=1.0,
-            precision="16-mixed",
+            precision="bf16-mixed",
+            accumulate_grad_batches=16,
         )
 
         inference_config = InferenceConfig(

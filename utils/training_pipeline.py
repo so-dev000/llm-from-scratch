@@ -24,6 +24,10 @@ class TransformerDataModule(L.LightningDataModule):
         load_dataset(self.config.data.dataset_name, split="train")
 
     def setup(self, stage: Optional[str] = None):
+        # Skip if already loaded from cache
+        if self.tokenized_datasets is not None:
+            return
+
         dataset_dir = self.config.data.dataset_name.replace("/", "_")
         tokenizer_dir = f"{self.config.tokenizer_dir}/{dataset_dir}"
 
@@ -81,6 +85,38 @@ class TransformerDataModule(L.LightningDataModule):
             remove_columns=train_val["train"].column_names,
             desc="Tokenizing dataset",
         )
+
+        # Save to volume
+        cache_path = f"/vol/processed/{dataset_dir}"
+        os.makedirs(cache_path, exist_ok=True)
+        self.tokenized_datasets.save_to_disk(cache_path)
+
+        self.tokenized_datasets.set_format(type="torch", columns=["src", "tgt"])
+
+    def load_from_cache(self):
+        from datasets import load_from_disk
+
+        dataset_dir = self.config.data.dataset_name.replace("/", "_")
+        tokenizer_dir = f"{self.config.tokenizer_dir}/{dataset_dir}"
+        cache_path = f"/vol/processed/{dataset_dir}"
+
+        if not os.path.exists(cache_path):
+            raise FileNotFoundError(
+                f"Processed data not found at {cache_path}. Run prepare_dataset first"
+            )
+
+        src_lang = self.config.data.src_lang
+        tgt_lang = self.config.data.tgt_lang
+        src_tokenizer_path = f"{tokenizer_dir}/{src_lang}_bpe.pkl"
+        tgt_tokenizer_path = f"{tokenizer_dir}/{tgt_lang}_bpe.pkl"
+
+        self.src_tokenizer = BPE.load(src_tokenizer_path)
+        self.tgt_tokenizer = BPE.load(tgt_tokenizer_path)
+
+        self.config.model.src_vocab_size = self.src_tokenizer.get_vocab_size()
+        self.config.model.tgt_vocab_size = self.tgt_tokenizer.get_vocab_size()
+
+        self.tokenized_datasets = load_from_disk(cache_path)
         self.tokenized_datasets.set_format(type="torch", columns=["src", "tgt"])
 
     def train_dataloader(self):
@@ -116,9 +152,18 @@ class GPTDataModule(L.LightningDataModule):
         self.tokenizer = None
 
     def prepare_data(self):
-        pass
+        load_dataset(
+            self.config.data.dataset_name,
+            self.config.data.dataset_config,
+            split="train",
+            streaming=True,
+        )
 
     def setup(self, stage: Optional[str] = None):
+        # Skip if already loaded from cache
+        if self.tokenized_datasets is not None:
+            return
+
         dataset_dir = self.config.data.dataset_name.replace("/", "_")
         tokenizer_path = f"{self.config.tokenizer_dir}/{dataset_dir}/tokenizer.json"
 
@@ -147,6 +192,12 @@ class GPTDataModule(L.LightningDataModule):
         )
         dataset = Dataset.from_list(dataset_list)
         split_data = dataset.train_test_split(test_size=0.05, seed=42)
+
+        # Rename 'test' to 'val' for consistency
+        split_data = DatasetDict(
+            {"train": split_data["train"], "val": split_data["test"]}
+        )
+
         text_column = self.config.data.text_column
 
         def preprocess_batch(batch):
@@ -167,6 +218,40 @@ class GPTDataModule(L.LightningDataModule):
             remove_columns=split_data["train"].column_names,
             desc="Tokenizing dataset",
         )
+
+        # Save to volume
+        dataset_dir = self.config.data.dataset_name.replace("/", "_")
+        cache_path = f"/vol/processed/{dataset_dir}"
+        os.makedirs(cache_path, exist_ok=True)
+        self.tokenized_datasets.save_to_disk(cache_path)
+
+        self.tokenized_datasets.set_format(type="torch", columns=["input_ids"])
+
+    def load_from_cache(self):
+        from datasets import load_from_disk
+
+        dataset_dir = self.config.data.dataset_name.replace("/", "_")
+        tokenizer_path = f"{self.config.tokenizer_dir}/{dataset_dir}/tokenizer.json"
+        cache_path = f"/vol/processed/{dataset_dir}"
+
+        if not os.path.exists(cache_path):
+            raise FileNotFoundError(
+                f"Processed data not found at {cache_path}. Run prepare_dataset first"
+            )
+
+        self.tokenizer = Tokenizer.from_file(tokenizer_path)
+        self.config.model.vocab_size = self.tokenizer.get_vocab_size()
+
+        self.tokenized_datasets = load_from_disk(cache_path)
+
+        # Handle backward compatibility: rename 'test' to 'val' if needed
+        if "test" in self.tokenized_datasets and "val" not in self.tokenized_datasets:
+            self.tokenized_datasets = DatasetDict(
+                {
+                    "train": self.tokenized_datasets["train"],
+                    "val": self.tokenized_datasets["test"],
+                }
+            )
 
         self.tokenized_datasets.set_format(type="torch", columns=["input_ids"])
 
