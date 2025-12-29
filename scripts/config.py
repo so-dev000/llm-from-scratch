@@ -292,7 +292,7 @@ class Config:
     def for_llama(cls, **overrides) -> "Config":
         data_config = DataConfig(
             dataset_name="HuggingFaceFW/fineweb-edu",
-            batch_size=28,
+            batch_size=16,
             max_length=512,
             num_workers=4,
             pad_idx=0,
