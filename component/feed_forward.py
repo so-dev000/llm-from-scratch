@@ -14,20 +14,20 @@ class FeedForward(nn.Module):
         activation_func: ACTIVATION_FUNC,
     ):
         super().__init__()
-        self.linear_1 = nn.Linear(model_dim, feedforward_dim)
+        self.w1 = nn.Linear(model_dim, feedforward_dim)
         if activation_func.lower() == "relu":
             self.activation_func = nn.ReLU()
         elif activation_func.lower() == "gelu":
             self.activation_func = nn.GELU()
         else:
             raise ValueError(f"Unknown activation function: {activation_func}")
-        self.linear_2 = nn.Linear(feedforward_dim, model_dim)
+        self.w2 = nn.Linear(feedforward_dim, model_dim)
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, inputs):
-        middle = self.linear_1(inputs)
-        relu = self.activation_func(middle)
-        output = self.linear_2(relu)
+    def forward(self, x):
+        h = self.w1(x)
+        h = self.activation_func(h)
+        output = self.w2(h)
         # dropout
         output = self.dropout(output)
         return output

@@ -47,13 +47,13 @@ class GPT(nn.Module):
         for layer in self.gpt_block.gpt_layers:
             # Attention projection
             nn.init.normal_(
-                layer.masked_attention.out_proj.weight,
+                layer.attention.wo.weight,
                 mean=0.0,
                 std=0.02 * scale,
             )
             # FFN projection
             nn.init.normal_(
-                layer.feed_forward.linear_2.weight,
+                layer.feed_forward.w2.weight,
                 mean=0.0,
                 std=0.02 * scale,
             )

@@ -14,21 +14,21 @@ class GPTLayer(nn.Module):
         activation_func: str,
     ):
         super().__init__()
-        self.masked_attention = MultiheadAttention(model_dim, num_heads, dropout)
-        self.normalizer_1 = nn.LayerNorm(model_dim)
+        self.attention = MultiheadAttention(model_dim, num_heads, dropout)
+        self.attention_norm = nn.LayerNorm(model_dim)
         self.feed_forward = FeedForward(
             model_dim, feedforward_dim, dropout, activation_func
         )
-        self.normalizer_2 = nn.LayerNorm(model_dim)
+        self.ffn_norm = nn.LayerNorm(model_dim)
 
-    def forward(self, inputs, mask=None):
+    def forward(self, x, mask=None):
         # Pre-LN: Normalize before attention
-        normalized_1 = self.normalizer_1(inputs)
-        masked_attention_out = self.masked_attention(normalized_1, mask=mask)
-        x = inputs + masked_attention_out  # Residual
+        h = self.attention_norm(x)
+        h = self.attention(h, mask=mask)
+        h = x + h  # Residual
 
         # Pre-LN: Normalize before FFN
-        normalized_2 = self.normalizer_2(x)
-        feed_forward_out = self.feed_forward(normalized_2)
-        output = x + feed_forward_out  # Residual
+        output = self.ffn_norm(h)
+        output = self.feed_forward(output)
+        output = h + output  # Residual
         return output
