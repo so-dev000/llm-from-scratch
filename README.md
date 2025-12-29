@@ -55,12 +55,11 @@ python -m scripts.prepare_local --model-type=llama --num-samples=100000
 python -m scripts.train_local --model-type=llama --run-name="llama-exp-1"
 ```
 
-### Option C: Kaggle Notebook (Free GPU)
+### Option C: Google Colab (Free GPU)
 
-1. Upload `notebooks/train_llama_kaggle.ipynb` to Kaggle
-2. Enable GPU: Settings > Accelerator > GPU T4 x2
+1. Open `notebooks/train_llama_colab.ipynb` in Google Colab
+2. Runtime > Change runtime type > GPU (T4)
 3. Run all cells
-4. Download trained model from Output section
 
 ### Common Steps
 
