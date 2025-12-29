@@ -3,6 +3,7 @@ import torch
 from torch import nn
 
 from model.gpt import GPT
+from model.llama import Llama
 from model.transformer import Transformer
 from utils.decoding_strategy import BeamSearch, GreedyDecoding
 
@@ -203,7 +204,6 @@ class GPTLightningModule(L.LightningModule):
         return generated
 
     def configure_optimizers(self):
-        # Separate parameters for weight decay
         decay = set()
         no_decay = set()
 
@@ -230,18 +230,139 @@ class GPTLightningModule(L.LightningModule):
             eps=self.config.optimizer.adam_epsilon,
         )
 
-        # GPT-2: Cosine annealing scheduler
         total_steps = self.trainer.estimated_stepping_batches
         warmup_steps = self.config.optimizer.warmup_steps
 
         def lr_lambda(step):
             if step < warmup_steps:
-                # Linear warmup
                 return step / warmup_steps
             else:
-                # Cosine annealing
                 progress = (step - warmup_steps) / (total_steps - warmup_steps)
                 return 0.5 * (1 + torch.cos(torch.tensor(progress * 3.14159265359)))
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1,
+            },
+        }
+
+
+class LlamaLightningModule(L.LightningModule):
+    def __init__(self, config):
+        super().__init__()
+        self.save_hyperparameters(config.to_dict())
+        self.config = config
+        self.model = Llama(config.model)
+        self.criterion = nn.CrossEntropyLoss(
+            ignore_index=config.data.pad_idx,
+            label_smoothing=config.training.label_smoothing,
+        )
+        self.causal_mask_cache = {}
+
+    def forward(self, tokens, mask=None):
+        return self.model(tokens, mask)
+
+    def _shared_step(self, batch, batch_idx):
+        input_ids = batch["input_ids"]
+        input_tokens = input_ids[:, :-1]
+        target_tokens = input_ids[:, 1:]
+        batch_size, seq_len = input_tokens.shape
+
+        if seq_len not in self.causal_mask_cache:
+            self.causal_mask_cache[seq_len] = torch.triu(
+                torch.full(
+                    (seq_len, seq_len),
+                    float("-inf"),
+                    device=input_tokens.device,
+                    dtype=torch.float32,
+                ),
+                diagonal=1,
+            )
+        causal_mask = self.causal_mask_cache[seq_len]
+
+        logits = self(input_tokens, causal_mask)
+        logits_flat = logits.reshape(-1, logits.size(-1))
+        target_flat = target_tokens.reshape(-1)
+        loss = self.criterion(logits_flat, target_flat)
+        return loss
+
+    def training_step(self, batch, batch_idx):
+        loss = self._shared_step(batch, batch_idx)
+        self.log(
+            "train_loss", loss, on_step=True, on_epoch=False, prog_bar=True, logger=True
+        )
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        loss = self._shared_step(batch, batch_idx)
+        self.log(
+            "val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True
+        )
+        return loss
+
+    def on_validation_epoch_end(self):
+        pass
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        input_ids = batch["input_ids"]
+        max_gen_len = self.config.inference.max_gen_len
+        generated = input_ids[:, :1]
+        for _ in range(max_gen_len - 1):
+            seq_len = generated.size(1)
+            mask = torch.triu(
+                torch.full((seq_len, seq_len), float("-inf"), device=generated.device),
+                diagonal=1,
+            )
+            logits = self(generated, mask)
+            next_token = logits[:, -1, :].argmax(dim=-1, keepdim=True)
+            generated = torch.cat([generated, next_token], dim=1)
+            if (next_token == self.config.inference.eos_idx).all():
+                break
+        return generated
+
+    def configure_optimizers(self):
+        decay = set()
+        no_decay = set()
+
+        for name, param in self.named_parameters():
+            if param.requires_grad:
+                if any(nd in name for nd in ["bias", "norm"]):
+                    no_decay.add(name)
+                else:
+                    decay.add(name)
+
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        optim_groups = [
+            {"params": [param_dict[pn] for pn in sorted(decay)], "weight_decay": 0.1},
+            {
+                "params": [param_dict[pn] for pn in sorted(no_decay)],
+                "weight_decay": 0.0,
+            },
+        ]
+
+        optimizer = torch.optim.AdamW(
+            optim_groups,
+            lr=self.config.optimizer.initial_lr,
+            betas=(self.config.optimizer.adam_beta1, self.config.optimizer.adam_beta2),
+            eps=self.config.optimizer.adam_epsilon,
+        )
+
+        total_steps = self.trainer.estimated_stepping_batches
+        warmup_steps = self.config.optimizer.warmup_steps
+
+        def lr_lambda(step):
+            if step < warmup_steps:
+                return step / warmup_steps
+            else:
+                progress = (step - warmup_steps) / (total_steps - warmup_steps)
+                return max(
+                    0.1, 0.5 * (1 + torch.cos(torch.tensor(progress * 3.14159265359)))
+                )
 
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 

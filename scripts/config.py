@@ -63,6 +63,22 @@ class GPTModelConfig:
 
 
 @dataclass
+class LlamaModelConfig:
+    model_type: Literal["llama"] = "llama"
+    vocab_size: int = None
+    model_dim: int = 4096
+    num_layers: int = 32
+    num_heads: int = 32
+    num_kv_heads: int = 8
+    feedforward_dim: int = None
+    max_seq_len: int = 2048
+    dropout: float = 0.0
+    norm_eps: float = 1e-5
+    rope_theta: float = 10000.0
+    padding_idx: int = 0
+
+
+@dataclass
 class TrainingConfig:
     num_epochs: int
     label_smoothing: float
@@ -110,7 +126,7 @@ class WandbConfig:
 class Config:
     data: DataConfig
     optimizer: OptimizerConfig
-    model: TransformerModelConfig | GPTModelConfig
+    model: TransformerModelConfig | GPTModelConfig | LlamaModelConfig
     training: TrainingConfig
     inference: InferenceConfig
 
@@ -120,6 +136,17 @@ class Config:
     run_name: str = None
     checkpoint_dir: str = "/vol/runs"
     tokenizer_dir: str = "/vol/tokenizers"
+
+    def _apply_overrides(self, overrides: dict) -> None:
+        for key, value in overrides.items():
+            if "." in key:
+                parts = key.split(".")
+                obj = self
+                for part in parts[:-1]:
+                    obj = getattr(obj, part)
+                setattr(obj, parts[-1], value)
+            else:
+                setattr(self, key, value)
 
     @classmethod
     def for_transformer(cls, **overrides) -> "Config":
@@ -180,16 +207,7 @@ class Config:
             wandb=wandb_config,
         )
 
-        for key, value in overrides.items():
-            if "." in key:
-                parts = key.split(".")
-                obj = config
-                for part in parts[:-1]:
-                    obj = getattr(obj, part)
-                setattr(obj, parts[-1], value)
-            else:
-                setattr(config, key, value)
-
+        config._apply_overrides(overrides)
         return config
 
     @classmethod
@@ -257,19 +275,83 @@ class Config:
             wandb=wandb_config,
         )
 
-        for key, value in overrides.items():
-            if "." in key:
-                parts = key.split(".")
-                obj = config
-                for part in parts[:-1]:
-                    obj = getattr(obj, part)
-                setattr(obj, parts[-1], value)
-            else:
-                setattr(config, key, value)
+        config._apply_overrides(overrides)
+        return config
 
+    @classmethod
+    def for_llama(cls, **overrides) -> "Config":
+        data_config = DataConfig(
+            dataset_name="HuggingFaceFW/fineweb-edu",
+            batch_size=32,
+            max_length=2048,
+            num_workers=8,
+            pad_idx=0,
+            vocab_size=32000,
+            text_column="text",
+            dataset_config="sample-10BT",
+            prefetch_factor=4,
+        )
+
+        optimizer_config = OptimizerConfig(
+            warmup_steps=2000,
+            adam_beta1=0.9,
+            adam_beta2=0.95,
+            adam_epsilon=1e-8,
+            optimizer_type="AdamW",
+            initial_lr=3e-4,
+        )
+
+        model_config = LlamaModelConfig(
+            model_dim=4096,
+            num_layers=32,
+            num_heads=32,
+            num_kv_heads=8,
+            feedforward_dim=11008,
+            max_seq_len=2048,
+            dropout=0.0,
+            norm_eps=1e-5,
+            rope_theta=10000.0,
+        )
+
+        training_config = TrainingConfig(
+            num_epochs=3,
+            label_smoothing=0.0,
+            early_stopping_patience=2,
+            gradient_clip_val=1.0,
+            precision="bf16-true",
+        )
+
+        inference_config = InferenceConfig(
+            pad_idx=0,
+            unk_idx=1,
+            bos_idx=2,
+            eos_idx=3,
+            temperature=0.6,
+            top_k=50,
+            top_p=0.9,
+            max_gen_len=512,
+        )
+
+        modal_config = ModalConfig(gpu_type="H200")
+        wandb_config = WandbConfig()
+
+        config = cls(
+            data=data_config,
+            optimizer=optimizer_config,
+            model=model_config,
+            training=training_config,
+            inference=inference_config,
+            modal=modal_config,
+            wandb=wandb_config,
+        )
+
+        config._apply_overrides(overrides)
         return config
 
     def validate(self) -> None:
+        if self.model.vocab_size is None:
+            self.model.vocab_size = self.data.vocab_size
+
         if self.model.num_heads > 0:
             if self.model.model_dim % self.model.num_heads != 0:
                 raise ValueError(
@@ -283,6 +365,12 @@ class Config:
         elif isinstance(self.model, GPTModelConfig):
             if self.model.feedforward_dim is None:
                 self.model.feedforward_dim = 4 * self.model.model_dim
+        elif isinstance(self.model, LlamaModelConfig):
+            if self.model.feedforward_dim is None:
+                self.model.feedforward_dim = int(8 * self.model.model_dim / 3)
+                self.model.feedforward_dim = (
+                    (self.model.feedforward_dim + 255) // 256
+                ) * 256
 
         if self.data.batch_size <= 0:
             raise ValueError(f"batch_size must be positive, got {self.data.batch_size}")

@@ -8,7 +8,11 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
 from scripts.config import Config
-from scripts.lightning_module import GPTLightningModule, TransformerLightningModule
+from scripts.lightning_module import (
+    GPTLightningModule,
+    LlamaLightningModule,
+    TransformerLightningModule,
+)
 from utils.training_pipeline import get_data_module
 
 app = modal.App("llm-training")
@@ -75,6 +79,8 @@ def train(config: Config):
         pl_module = TransformerLightningModule(config)
     elif config.model.model_type == "gpt":
         pl_module = GPTLightningModule(config)
+    elif config.model.model_type == "llama":
+        pl_module = LlamaLightningModule(config)
     else:
         raise ValueError(f"Unknown model type: {config.model.model_type}")
 
@@ -130,9 +136,12 @@ def main(model_type: str = "transformer", run_name: str = None):
         config = Config.for_transformer()
     elif model_type == "gpt":
         config = Config.for_gpt()
+    elif model_type == "llama":
+        config = Config.for_llama()
     else:
         raise ValueError(
-            f"Unknown model type: {model_type}. Must be 'transformer' or 'gpt'"
+            f"Unknown model type: {model_type}. "
+            f"Must be 'transformer', 'gpt', or 'llama'"
         )
 
     if run_name is None:
