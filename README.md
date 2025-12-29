@@ -51,6 +51,14 @@ python -m scripts.eval --run-name="llama-exp-1" --model-type=llama
 python -m scripts.inference --run-name="llama-exp-1" --model-type=llama --mode=local
 ```
 
+## Model Visualization
+
+```bash
+python scripts/visualize_model.py gpt
+python scripts/visualize_model.py llama
+python scripts/visualize_model.py transformer
+```
+
 ## Project Structure
 
 ```
