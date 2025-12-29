@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from component.rotary_embedding import apply_rotary_emb
@@ -20,7 +21,7 @@ class Attention(nn.Module):
         self.wk = nn.Linear(model_dim, num_kv_heads * self.head_dim, bias=False)
         self.wv = nn.Linear(model_dim, num_kv_heads * self.head_dim, bias=False)
         self.wo = nn.Linear(num_heads * self.head_dim, model_dim, bias=False)
-        self.dropout = nn.Dropout(p=dropout)
+        self.dropout_p = dropout
 
     def forward(
         self, x: torch.Tensor, freqs_cis: torch.Tensor = None, mask: torch.Tensor = None
@@ -50,16 +51,27 @@ class Attention(nn.Module):
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        # Q x K^T / sqrt(head_dim)
-        scores = torch.matmul(q, k.transpose(2, 3)) / (self.head_dim**0.5)
-
+        # Convert mask format for scaled_dot_product_attention
+        attn_mask = None
         if mask is not None:
-            scores = scores + mask
+            if mask.dim() == 2:
+                attn_mask = mask.unsqueeze(0).unsqueeze(0)  # (1, 1, seq, seq)
+            elif mask.dim() == 3:
+                attn_mask = mask.unsqueeze(1)  # (batch, 1, seq, seq)
+            else:
+                attn_mask = mask
+            # Ensure mask dtype matches query dtype
+            attn_mask = attn_mask.to(dtype=q.dtype)
 
-        attention_weights = torch.softmax(scores, dim=-1)
-        attention_weights = self.dropout(attention_weights)
-
-        output = torch.matmul(attention_weights, v)
+        # Use Flash Attention
+        output = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=attn_mask,
+            dropout_p=self.dropout_p if self.training else 0.0,
+            is_causal=False,
+        )
 
         output = output.transpose(1, 2)
         output = output.contiguous().view(batch_size, seq_len, -1)

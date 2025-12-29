@@ -9,6 +9,7 @@ dependencies = [
     "lightning>=2.6.0",
     "matplotlib>=3.10.7",
     "modal>=1.2.2",
+    "prompt-toolkit>=3.0.52",
     "python-dotenv>=1.2.1",
     "regex>=2025.11.3",
     "sacrebleu[ja]>=2.5.1",

@@ -73,5 +73,8 @@ class GPT(nn.Module):
         return None
 
     def generate_next_token(self, tokens, context=None):
+        # Truncate to max_seq_len if necessary
+        if tokens.shape[1] > self.config.max_seq_len:
+            tokens = tokens[:, -self.config.max_seq_len :]
         logits = self.forward(tokens, mask=None)
         return logits[:, -1, :]

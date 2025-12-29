@@ -26,6 +26,7 @@ class Llama(nn.Module):
             config.feedforward_dim,
             config.dropout,
             config.norm_eps,
+            config.use_gradient_checkpointing,
         )
         self.norm = RMSNorm(config.model_dim, eps=config.norm_eps)
         self.output = nn.Linear(config.model_dim, config.vocab_size, bias=False)
@@ -54,5 +55,8 @@ class Llama(nn.Module):
         return None
 
     def generate_next_token(self, tokens: torch.Tensor, context: torch.Tensor = None):
+        # Truncate to max_seq_len if necessary
+        if tokens.shape[1] > self.config.max_seq_len:
+            tokens = tokens[:, -self.config.max_seq_len :]
         logits = self.forward(tokens, mask=None)
         return logits[:, -1, :]

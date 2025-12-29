@@ -1,12 +1,10 @@
 import os
-from itertools import islice
 from typing import Optional
 
 import pytorch_lightning as L
-from datasets import Dataset, DatasetDict, load_dataset
+from datasets import DatasetDict, load_dataset
 from tokenizers import Tokenizer
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 from tokenizer.bpe import BPE
 from utils.collate import collate
@@ -24,7 +22,6 @@ class TransformerDataModule(L.LightningDataModule):
         load_dataset(self.config.data.dataset_name, split="train")
 
     def setup(self, stage: Optional[str] = None):
-        # Skip if already loaded from cache
         if self.tokenized_datasets is not None:
             return
 
@@ -51,10 +48,11 @@ class TransformerDataModule(L.LightningDataModule):
         self.config.model.tgt_vocab_size = self.tgt_tokenizer.get_vocab_size()
 
         dataset = load_dataset(self.config.data.dataset_name, split="train")
-        train_rest = dataset.train_test_split(test_size=0.15, seed=42)
-        val_test = train_rest["test"].train_test_split(test_size=0.33, seed=42)
+        split_data = dataset.train_test_split(
+            test_size=self.config.data.val_split_size, seed=42
+        )
         train_val = DatasetDict(
-            {"train": train_rest["train"], "val": val_test["train"]}
+            {"train": split_data["train"], "val": split_data["test"]}
         )
         src_column = self.config.data.src_column
         tgt_column = self.config.data.tgt_column
@@ -81,42 +79,11 @@ class TransformerDataModule(L.LightningDataModule):
         self.tokenized_datasets = train_val.map(
             preprocess_batch,
             batched=True,
-            batch_size=1000,
+            batch_size=self.config.data.preprocess_batch_size,
             remove_columns=train_val["train"].column_names,
             desc="Tokenizing dataset",
         )
 
-        # Save to volume
-        cache_path = f"/vol/processed/{dataset_dir}"
-        os.makedirs(cache_path, exist_ok=True)
-        self.tokenized_datasets.save_to_disk(cache_path)
-
-        self.tokenized_datasets.set_format(type="torch", columns=["src", "tgt"])
-
-    def load_from_cache(self):
-        from datasets import load_from_disk
-
-        dataset_dir = self.config.data.dataset_name.replace("/", "_")
-        tokenizer_dir = f"{self.config.tokenizer_dir}/{dataset_dir}"
-        cache_path = f"/vol/processed/{dataset_dir}"
-
-        if not os.path.exists(cache_path):
-            raise FileNotFoundError(
-                f"Processed data not found at {cache_path}. Run prepare_dataset first"
-            )
-
-        src_lang = self.config.data.src_lang
-        tgt_lang = self.config.data.tgt_lang
-        src_tokenizer_path = f"{tokenizer_dir}/{src_lang}_bpe.pkl"
-        tgt_tokenizer_path = f"{tokenizer_dir}/{tgt_lang}_bpe.pkl"
-
-        self.src_tokenizer = BPE.load(src_tokenizer_path)
-        self.tgt_tokenizer = BPE.load(tgt_tokenizer_path)
-
-        self.config.model.src_vocab_size = self.src_tokenizer.get_vocab_size()
-        self.config.model.tgt_vocab_size = self.tgt_tokenizer.get_vocab_size()
-
-        self.tokenized_datasets = load_from_disk(cache_path)
         self.tokenized_datasets.set_format(type="torch", columns=["src", "tgt"])
 
     def train_dataloader(self):
@@ -148,118 +115,77 @@ class GPTDataModule(L.LightningDataModule):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.tokenized_datasets = None
         self.tokenizer = None
-
-    def prepare_data(self):
-        load_dataset(
-            self.config.data.dataset_name,
-            self.config.data.dataset_config,
-            split="train",
-            streaming=True,
-        )
+        self.train_dataset = None
+        self.val_dataset = None
 
     def setup(self, stage: Optional[str] = None):
-        # Skip if already loaded from cache
-        if self.tokenized_datasets is not None:
+        if self.train_dataset is not None and self.val_dataset is not None:
             return
 
         dataset_dir = self.config.data.dataset_name.replace("/", "_")
         tokenizer_path = f"{self.config.tokenizer_dir}/{dataset_dir}/tokenizer.json"
 
         if not os.path.exists(tokenizer_path):
-            raise FileNotFoundError(
-                f"Tokenizer not found at {tokenizer_path}. Run scripts/prepare.py first"
-            )
+            raise FileNotFoundError(f"Tokenizer not found at {tokenizer_path}")
 
         self.tokenizer = Tokenizer.from_file(tokenizer_path)
         self.config.model.vocab_size = self.tokenizer.get_vocab_size()
 
-        num_samples = 1_000_000
+        num_samples = self.config.data.tokenizer_train_samples
+
         dataset = load_dataset(
             self.config.data.dataset_name,
             self.config.data.dataset_config,
             split="train",
-            streaming=True,
+            streaming=False,
         )
 
-        dataset_list = list(
-            tqdm(
-                islice(dataset, num_samples),
-                total=num_samples,
-                desc="Loading training data",
-            )
-        )
-        dataset = Dataset.from_list(dataset_list)
-        split_data = dataset.train_test_split(test_size=0.05, seed=42)
+        # Select only the required samples without loading all into memory
+        dataset = dataset.select(range(min(num_samples, len(dataset))))
 
-        # Rename 'test' to 'val' for consistency
-        split_data = DatasetDict(
-            {"train": split_data["train"], "val": split_data["test"]}
+        split_data = dataset.train_test_split(
+            test_size=self.config.data.val_split_size, seed=42
         )
-
-        text_column = self.config.data.text_column
 
         def preprocess_batch(batch):
-            texts = batch[text_column]
+            texts = batch[self.config.data.text_column]
             encodings = self.tokenizer.encode_batch(texts)
-            token_ids = []
-            for encoding in encodings:
-                ids = encoding.ids
-                if len(ids) > self.config.data.max_length:
-                    ids = ids[: self.config.data.max_length]
-                token_ids.append(ids)
+            max_len = self.config.data.max_length
+            token_ids = [
+                enc.ids[:max_len] if len(enc.ids) > max_len else enc.ids
+                for enc in encodings
+            ]
             return {"input_ids": token_ids}
 
-        self.tokenized_datasets = split_data.map(
+        train_data = split_data["train"].map(
             preprocess_batch,
             batched=True,
-            batch_size=1000,
+            batch_size=self.config.data.preprocess_batch_size,
+            num_proc=self.config.data.preprocess_num_proc,
             remove_columns=split_data["train"].column_names,
-            desc="Tokenizing dataset",
+            desc="Tokenizing train data",
+        )
+        val_data = split_data["test"].map(
+            preprocess_batch,
+            batched=True,
+            batch_size=self.config.data.preprocess_batch_size,
+            num_proc=self.config.data.preprocess_num_proc,
+            remove_columns=split_data["test"].column_names,
+            desc="Tokenizing val data",
         )
 
-        # Save to volume
-        dataset_dir = self.config.data.dataset_name.replace("/", "_")
-        cache_path = f"/vol/processed/{dataset_dir}"
-        os.makedirs(cache_path, exist_ok=True)
-        self.tokenized_datasets.save_to_disk(cache_path)
+        train_data.set_format(type="torch", columns=["input_ids"])
+        val_data.set_format(type="torch", columns=["input_ids"])
 
-        self.tokenized_datasets.set_format(type="torch", columns=["input_ids"])
-
-    def load_from_cache(self):
-        from datasets import load_from_disk
-
-        dataset_dir = self.config.data.dataset_name.replace("/", "_")
-        tokenizer_path = f"{self.config.tokenizer_dir}/{dataset_dir}/tokenizer.json"
-        cache_path = f"/vol/processed/{dataset_dir}"
-
-        if not os.path.exists(cache_path):
-            raise FileNotFoundError(
-                f"Processed data not found at {cache_path}. Run prepare_dataset first"
-            )
-
-        self.tokenizer = Tokenizer.from_file(tokenizer_path)
-        self.config.model.vocab_size = self.tokenizer.get_vocab_size()
-
-        self.tokenized_datasets = load_from_disk(cache_path)
-
-        # Handle backward compatibility: rename 'test' to 'val' if needed
-        if "test" in self.tokenized_datasets and "val" not in self.tokenized_datasets:
-            self.tokenized_datasets = DatasetDict(
-                {
-                    "train": self.tokenized_datasets["train"],
-                    "val": self.tokenized_datasets["test"],
-                }
-            )
-
-        self.tokenized_datasets.set_format(type="torch", columns=["input_ids"])
+        self.train_dataset = train_data
+        self.val_dataset = val_data
 
     def train_dataloader(self):
         from utils.collate import collate_gpt
 
         return DataLoader(
-            self.tokenized_datasets["train"],
+            self.train_dataset,
             batch_size=self.config.data.batch_size,
             shuffle=True,
             collate_fn=collate_gpt,
@@ -273,7 +199,106 @@ class GPTDataModule(L.LightningDataModule):
         from utils.collate import collate_gpt
 
         return DataLoader(
-            self.tokenized_datasets["val"],
+            self.val_dataset,
+            batch_size=self.config.data.batch_size,
+            shuffle=False,
+            collate_fn=collate_gpt,
+            num_workers=self.config.data.num_workers,
+            pin_memory=self.config.data.pin_memory,
+            persistent_workers=self.config.data.persistent_workers,
+            prefetch_factor=self.config.data.prefetch_factor,
+        )
+
+
+class LlamaDataModule(L.LightningDataModule):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.tokenizer = None
+        self.train_dataset = None
+        self.val_dataset = None
+
+    def setup(self, stage: Optional[str] = None):
+        if self.train_dataset is not None and self.val_dataset is not None:
+            return
+
+        dataset_dir = self.config.data.dataset_name.replace("/", "_")
+        tokenizer_path = f"{self.config.tokenizer_dir}/{dataset_dir}/tokenizer.json"
+
+        if not os.path.exists(tokenizer_path):
+            raise FileNotFoundError(f"Tokenizer not found at {tokenizer_path}")
+
+        self.tokenizer = Tokenizer.from_file(tokenizer_path)
+        self.config.model.vocab_size = self.tokenizer.get_vocab_size()
+
+        num_samples = self.config.data.tokenizer_train_samples
+
+        dataset = load_dataset(
+            self.config.data.dataset_name,
+            self.config.data.dataset_config,
+            split="train",
+            streaming=False,
+        )
+
+        # Select only the required samples without loading all into memory
+        dataset = dataset.select(range(min(num_samples, len(dataset))))
+
+        split_data = dataset.train_test_split(
+            test_size=self.config.data.val_split_size, seed=42
+        )
+
+        def preprocess_batch(batch):
+            texts = batch[self.config.data.text_column]
+            encodings = self.tokenizer.encode_batch(texts)
+            max_len = self.config.data.max_length
+            token_ids = [
+                enc.ids[:max_len] if len(enc.ids) > max_len else enc.ids
+                for enc in encodings
+            ]
+            return {"input_ids": token_ids}
+
+        train_data = split_data["train"].map(
+            preprocess_batch,
+            batched=True,
+            batch_size=self.config.data.preprocess_batch_size,
+            num_proc=self.config.data.preprocess_num_proc,
+            remove_columns=split_data["train"].column_names,
+            desc="Tokenizing train data",
+        )
+        val_data = split_data["test"].map(
+            preprocess_batch,
+            batched=True,
+            batch_size=self.config.data.preprocess_batch_size,
+            num_proc=self.config.data.preprocess_num_proc,
+            remove_columns=split_data["test"].column_names,
+            desc="Tokenizing val data",
+        )
+
+        train_data.set_format(type="torch", columns=["input_ids"])
+        val_data.set_format(type="torch", columns=["input_ids"])
+
+        self.train_dataset = train_data
+        self.val_dataset = val_data
+
+    def train_dataloader(self):
+        from utils.collate import collate_gpt
+
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.config.data.batch_size,
+            shuffle=True,
+            collate_fn=collate_gpt,
+            num_workers=self.config.data.num_workers,
+            pin_memory=self.config.data.pin_memory,
+            persistent_workers=self.config.data.persistent_workers,
+            prefetch_factor=self.config.data.prefetch_factor,
+        )
+
+    def val_dataloader(self):
+        from utils.collate import collate_gpt
+
+        return DataLoader(
+            self.val_dataset,
             batch_size=self.config.data.batch_size,
             shuffle=False,
             collate_fn=collate_gpt,
@@ -289,5 +314,7 @@ def get_data_module(config) -> L.LightningDataModule:
         return TransformerDataModule(config)
     elif config.model.model_type == "gpt":
         return GPTDataModule(config)
+    elif config.model.model_type == "llama":
+        return LlamaDataModule(config)
     else:
         raise ValueError(f"Unknown model type: {config.model.model_type}")

@@ -129,6 +129,7 @@ class SamplingDecoder(DecodingStrategy):
         temperature = self.config.temperature
         top_k = self.config.top_k
         top_p = self.config.top_p
+        repetition_penalty = getattr(self.config, "repetition_penalty", 1.0)
         results = []
 
         has_prompt = src_tokens.size(1) > 0 and (src_tokens != 0).any()
@@ -152,6 +153,16 @@ class SamplingDecoder(DecodingStrategy):
                     }
                 )
                 logits = model.generate_next_token(tgt_input, context_subset)
+
+                # Apply repetition penalty
+                if repetition_penalty != 1.0:
+                    for token_id in set(output_tokens):
+                        # If score < 0, multiply by penalty (make more negative)
+                        # If score > 0, divide by penalty (make less positive)
+                        if logits[0, token_id] < 0:
+                            logits[0, token_id] *= repetition_penalty
+                        else:
+                            logits[0, token_id] /= repetition_penalty
 
                 # Apply temperature scaling
                 logits = logits / temperature

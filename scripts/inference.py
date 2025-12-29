@@ -3,9 +3,13 @@ from pathlib import Path
 
 import modal
 import torch
+from prompt_toolkit import prompt
+from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.styles import Style
 from tokenizers import Tokenizer
 
 from model.gpt import GPT
+from model.llama import Llama
 from model.transformer import Transformer
 from scripts.config import Config
 from tokenizer.bpe import BPE
@@ -69,6 +73,36 @@ def load_model_and_config(run_name, checkpoint_name, model_type, dataset):
         config.data.dataset_name = dataset
         config.model.vocab_size = hyper_params.get("model.vocab_size", 50257)
         model = GPT(config.model).to(device)
+    elif model_type == "llama":
+        config = Config.for_llama()
+        config.data.dataset_name = dataset
+        config.model.vocab_size = hyper_params.get("model.vocab_size", 32000)
+        config.model.model_dim = hyper_params.get(
+            "model.model_dim", config.model.model_dim
+        )
+        config.model.num_layers = hyper_params.get(
+            "model.num_layers", config.model.num_layers
+        )
+        config.model.num_heads = hyper_params.get(
+            "model.num_heads", config.model.num_heads
+        )
+        config.model.num_kv_heads = hyper_params.get(
+            "model.num_kv_heads", config.model.num_kv_heads
+        )
+        config.model.feedforward_dim = hyper_params.get(
+            "model.feedforward_dim", config.model.feedforward_dim
+        )
+        config.model.max_seq_len = hyper_params.get(
+            "model.max_seq_len", config.model.max_seq_len
+        )
+        config.model.dropout = hyper_params.get("model.dropout", config.model.dropout)
+        config.model.norm_eps = hyper_params.get(
+            "model.norm_eps", config.model.norm_eps
+        )
+        config.model.rope_theta = hyper_params.get(
+            "model.rope_theta", config.model.rope_theta
+        )
+        model = Llama(config.model).to(device)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -100,6 +134,10 @@ def run_inference_remote(run_name, prompts, model_type, dataset, checkpoint, str
             model, prompts, src_tokenizer, tgt_tokenizer, config, strategy
         )
     elif model_type == "gpt":
+        tokenizer = Tokenizer.from_file(f"{tokenizer_dir}/tokenizer.json")
+
+        results = generate_batch(model, prompts, tokenizer, config, strategy)
+    elif model_type == "llama":
         tokenizer = Tokenizer.from_file(f"{tokenizer_dir}/tokenizer.json")
 
         results = generate_batch(model, prompts, tokenizer, config, strategy)
@@ -142,19 +180,76 @@ def run_inference_local(
 
         if interactive:
             print("GPT Interactive Mode (type 'exit', 'quit', or 'q' to exit)")
+            print("=" * 80)
+
+            history = InMemoryHistory()
+            style = Style.from_dict(
+                {
+                    "prompt": "#00aa00 bold",
+                }
+            )
+
             while True:
                 try:
-                    text = input("Prompt: ").strip()
+                    text = prompt(
+                        "Prompt> ", history=history, style=style, multiline=False
+                    ).strip()
+
                     if text.lower() in ["exit", "quit", "q"]:
+                        print("Exiting...")
                         break
                     if not text:
                         continue
 
+                    print("\nGenerating...", flush=True)
                     result = generate_text(
                         model, text, tokenizer, config, strategy=strategy
                     )
-                    print(f"Generated: {result}\n")
+                    print(f"\nGenerated:\n{result}")
+                    print("\n" + "=" * 80, flush=True)
                 except KeyboardInterrupt:
+                    print("\n\nExiting...")
+                    break
+                except EOFError:
+                    print("\n\nExiting...")
+                    break
+    elif model_type == "llama":
+        tokenizer = Tokenizer.from_file(f"{tokenizer_dir}/tokenizer.json")
+
+        if interactive:
+            print("Llama Interactive Mode (type 'exit', 'quit', or 'q' to exit)")
+            print("=" * 80)
+
+            history = InMemoryHistory()
+            style = Style.from_dict(
+                {
+                    "prompt": "#00aa00 bold",
+                }
+            )
+
+            while True:
+                try:
+                    text = prompt(
+                        "Prompt> ", history=history, style=style, multiline=False
+                    ).strip()
+
+                    if text.lower() in ["exit", "quit", "q"]:
+                        print("Exiting...")
+                        break
+                    if not text:
+                        continue
+
+                    print("\nGenerating...", flush=True)
+                    result = generate_text(
+                        model, text, tokenizer, config, strategy=strategy
+                    )
+                    print(f"\nGenerated:\n{result}")
+                    print("\n" + "=" * 80, flush=True)
+                except KeyboardInterrupt:
+                    print("\n\nExiting...")
+                    break
+                except EOFError:
+                    print("\n\nExiting...")
                     break
 
 
@@ -176,6 +271,10 @@ def main(
     if dataset is None:
         if model_type == "transformer":
             config = Config.for_transformer()
+        elif model_type == "gpt":
+            config = Config.for_gpt()
+        elif model_type == "llama":
+            config = Config.for_llama()
         else:
             config = Config.for_gpt()
         dataset = config.data.dataset_name
@@ -219,6 +318,10 @@ if __name__ == "__main__":
         if dataset is None:
             if args.model_type == "transformer":
                 config = Config.for_transformer()
+            elif args.model_type == "gpt":
+                config = Config.for_gpt()
+            elif args.model_type == "llama":
+                config = Config.for_llama()
             else:
                 config = Config.for_gpt()
             dataset = config.data.dataset_name

@@ -139,7 +139,6 @@ class GPTLightningModule(L.LightningModule):
             ignore_index=config.data.pad_idx,
             label_smoothing=config.training.label_smoothing,
         )
-        self.causal_mask_cache = {}
 
     def forward(self, tokens, mask=None):
         return self.model(tokens, mask)
@@ -152,13 +151,9 @@ class GPTLightningModule(L.LightningModule):
         input_mask = mask[:, :-1]
         batch_size, seq_len = input_tokens.shape
 
-        if seq_len not in self.causal_mask_cache:
-            self.causal_mask_cache[seq_len] = torch.tril(
-                torch.ones(
-                    seq_len, seq_len, device=input_tokens.device, dtype=torch.bool
-                )
-            )
-        causal_mask = self.causal_mask_cache[seq_len]
+        causal_mask = torch.tril(
+            torch.ones(seq_len, seq_len, device=input_tokens.device, dtype=torch.bool)
+        )
 
         combined_mask = (
             causal_mask.unsqueeze(0) & input_mask.unsqueeze(1) & input_mask.unsqueeze(2)
@@ -262,7 +257,6 @@ class LlamaLightningModule(L.LightningModule):
             ignore_index=config.data.pad_idx,
             label_smoothing=config.training.label_smoothing,
         )
-        self.causal_mask_cache = {}
 
     def forward(self, tokens, mask=None):
         return self.model(tokens, mask)
@@ -273,17 +267,15 @@ class LlamaLightningModule(L.LightningModule):
         target_tokens = input_ids[:, 1:]
         batch_size, seq_len = input_tokens.shape
 
-        if seq_len not in self.causal_mask_cache:
-            self.causal_mask_cache[seq_len] = torch.triu(
-                torch.full(
-                    (seq_len, seq_len),
-                    float("-inf"),
-                    device=input_tokens.device,
-                    dtype=torch.float32,
-                ),
-                diagonal=1,
-            )
-        causal_mask = self.causal_mask_cache[seq_len]
+        causal_mask = torch.triu(
+            torch.full(
+                (seq_len, seq_len),
+                float("-inf"),
+                device=input_tokens.device,
+                dtype=torch.float32,
+            ),
+            diagonal=1,
+        )
 
         logits = self(input_tokens, causal_mask)
         logits_flat = logits.reshape(-1, logits.size(-1))

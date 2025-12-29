@@ -19,6 +19,10 @@ class DataConfig:
     tgt_column: str = "ja_sentence"
     text_column: str = "text"
     dataset_config: str = None
+    tokenizer_train_samples: int = None
+    val_split_size: float = 0.05
+    preprocess_batch_size: int = 10000
+    preprocess_num_proc: int = 2
 
 
 @dataclass
@@ -76,6 +80,7 @@ class LlamaModelConfig:
     norm_eps: float = 1e-5
     rope_theta: float = 10000.0
     padding_idx: int = 0
+    use_gradient_checkpointing: bool = False
 
 
 @dataclass
@@ -86,6 +91,7 @@ class TrainingConfig:
     gradient_clip_val: float = 1.0
     precision: str = "32-true"
     val_check_interval: float = 1.0
+    accumulate_grad_batches: int = 1
 
 
 @dataclass
@@ -102,13 +108,13 @@ class InferenceConfig:
     temperature: float = 1.0
     top_k: int = 50
     top_p: float = 0.9
+    repetition_penalty: float = 1.2
 
     max_gen_len: int = 100
 
 
 @dataclass
 class ModalConfig:
-    gpu_type: str = "L40S"
     timeout_hours: int = 12
     volume_name: str = "llm-from-scratch"
     secret_name: str = "wandb-secret"
@@ -156,6 +162,9 @@ class Config:
             max_length=64,
             num_workers=8,
             pad_idx=0,
+            val_split_size=0.15,
+            preprocess_batch_size=1000,
+            preprocess_num_proc=8,
         )
 
         optimizer_config = OptimizerConfig(
@@ -222,6 +231,7 @@ class Config:
             text_column="text",
             dataset_config="sample-10BT",
             prefetch_factor=4,
+            tokenizer_train_samples=100_000,
         )
 
         optimizer_config = OptimizerConfig(
@@ -262,7 +272,7 @@ class Config:
             max_gen_len=100,
         )
 
-        modal_config = ModalConfig(gpu_type="H200")
+        modal_config = ModalConfig()
         wandb_config = WandbConfig()
 
         config = cls(
@@ -282,14 +292,17 @@ class Config:
     def for_llama(cls, **overrides) -> "Config":
         data_config = DataConfig(
             dataset_name="HuggingFaceFW/fineweb-edu",
-            batch_size=32,
-            max_length=2048,
-            num_workers=8,
+            batch_size=28,
+            max_length=512,
+            num_workers=4,
             pad_idx=0,
             vocab_size=32000,
             text_column="text",
             dataset_config="sample-10BT",
             prefetch_factor=4,
+            pin_memory=True,
+            persistent_workers=True,
+            tokenizer_train_samples=2_500_000,
         )
 
         optimizer_config = OptimizerConfig(
@@ -302,15 +315,16 @@ class Config:
         )
 
         model_config = LlamaModelConfig(
-            model_dim=4096,
-            num_layers=32,
-            num_heads=32,
-            num_kv_heads=8,
-            feedforward_dim=11008,
-            max_seq_len=2048,
-            dropout=0.0,
+            model_dim=512,
+            num_layers=8,
+            num_heads=8,
+            num_kv_heads=4,
+            feedforward_dim=2048,
+            max_seq_len=512,
+            dropout=0.1,
             norm_eps=1e-5,
             rope_theta=10000.0,
+            use_gradient_checkpointing=False,
         )
 
         training_config = TrainingConfig(
@@ -318,7 +332,8 @@ class Config:
             label_smoothing=0.0,
             early_stopping_patience=2,
             gradient_clip_val=1.0,
-            precision="bf16-true",
+            precision="bf16-mixed",
+            accumulate_grad_batches=2,
         )
 
         inference_config = InferenceConfig(
@@ -326,13 +341,14 @@ class Config:
             unk_idx=1,
             bos_idx=2,
             eos_idx=3,
-            temperature=0.6,
-            top_k=50,
-            top_p=0.9,
-            max_gen_len=512,
+            temperature=0.8,
+            top_k=20,
+            top_p=0.85,
+            repetition_penalty=1.5,
+            max_gen_len=100,
         )
 
-        modal_config = ModalConfig(gpu_type="H200")
+        modal_config = ModalConfig()
         wandb_config = WandbConfig()
 
         config = cls(

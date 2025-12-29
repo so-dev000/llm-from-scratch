@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
+from pathlib import Path
 
-import modal
 import pytorch_lightning as L
 import torch
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
@@ -15,40 +15,7 @@ from scripts.lightning_module import (
 )
 from utils.training_pipeline import get_data_module
 
-app = modal.App("llm-training")
 
-volume = modal.Volume.from_name("llm-from-scratch", create_if_missing=True)
-
-DEFAULT_GPU = "L4"
-
-image = (
-    modal.Image.debian_slim(python_version="3.11")
-    .pip_install(
-        "torch",
-        "torchinfo",
-        "pytorch-lightning",
-        "wandb",
-        "datasets",
-        "regex",
-        "tokenizers",
-    )
-    .add_local_dir("model", remote_path="/root/model")
-    .add_local_dir("utils", remote_path="/root/utils")
-    .add_local_dir("block", remote_path="/root/block")
-    .add_local_dir("layer", remote_path="/root/layer")
-    .add_local_dir("component", remote_path="/root/component")
-    .add_local_dir("tokenizer", remote_path="/root/tokenizer")
-    .add_local_dir("scripts", remote_path="/root/scripts")
-)
-
-
-@app.function(
-    image=image,
-    gpu=DEFAULT_GPU,
-    volumes={"/vol": volume},
-    timeout=3600 * 12,
-    secrets=[modal.Secret.from_name("wandb-secret")],
-)
 def train(config: Config):
     os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
@@ -90,7 +57,6 @@ def train(config: Config):
             entity=config.wandb.entity,
             name=config.run_name,
             log_model=config.wandb.log_model,
-            save_dir="/vol/wandb",
         )
         logger.experiment.config.update(config.to_dict())
     else:
@@ -110,11 +76,13 @@ def train(config: Config):
 
     trainer.fit(pl_module, datamodule=data_module)
 
-    volume.commit()
 
-
-@app.local_entrypoint()
-def main(model_type: str = "transformer", run_name: str = None):
+def main(
+    model_type: str = "transformer",
+    run_name: str = None,
+    checkpoint_dir: str = "./checkpoints",
+    tokenizer_dir: str = "./tokenizers",
+):
     if model_type == "transformer":
         config = Config.for_transformer()
     elif model_type == "gpt":
@@ -131,6 +99,30 @@ def main(model_type: str = "transformer", run_name: str = None):
         run_name = f"{model_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     config.run_name = run_name
+    config.checkpoint_dir = checkpoint_dir
+    config.tokenizer_dir = tokenizer_dir
     config.validate()
 
-    train.remote(config)
+    Path(checkpoint_dir).mkdir(parents=True, exist_ok=True)
+    Path(tokenizer_dir).mkdir(parents=True, exist_ok=True)
+
+    train(config)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model-type", type=str, default="transformer")
+    parser.add_argument("--run-name", type=str, default=None)
+    parser.add_argument("--checkpoint-dir", type=str, default="./checkpoints")
+    parser.add_argument("--tokenizer-dir", type=str, default="./tokenizers")
+
+    args = parser.parse_args()
+
+    main(
+        model_type=args.model_type,
+        run_name=args.run_name,
+        checkpoint_dir=args.checkpoint_dir,
+        tokenizer_dir=args.tokenizer_dir,
+    )
