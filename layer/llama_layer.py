@@ -27,4 +27,4 @@ class LlamaLayer(nn.Module):
     ) -> torch.Tensor:
         h = x + self.attention(self.attention_norm(x), freqs_cis, mask)
         out = h + self.feed_forward(self.ffn_norm(h))
-        raise out
+        return out
