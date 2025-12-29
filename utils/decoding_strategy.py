@@ -121,4 +121,76 @@ class GreedyDecoding(DecodingStrategy):
 
 class SamplingDecoder(DecodingStrategy):
     def decode(self, model, src_tokens, src_mask, max_len):
-        raise NotImplementedError()
+        device = src_tokens.device
+        batch_size = src_tokens.size(0)
+        context = model.prepare_context(src_tokens, src_mask)
+        bos_idx = self.config.bos_idx
+        eos_idx = self.config.eos_idx
+        temperature = self.config.temperature
+        top_k = self.config.top_k
+        top_p = self.config.top_p
+        results = []
+
+        has_prompt = src_tokens.size(1) > 0 and (src_tokens != 0).any()
+
+        for batch_idx in range(batch_size):
+            if has_prompt:
+                output_tokens = src_tokens[batch_idx].tolist()
+            else:
+                output_tokens = [bos_idx]
+
+            for _ in range(max_len):
+                tgt_input = torch.tensor([output_tokens], device=device)
+                context_subset = (
+                    context
+                    if context is None
+                    else {
+                        k: v[batch_idx : batch_idx + 1]
+                        if isinstance(v, torch.Tensor)
+                        else v
+                        for k, v in context.items()
+                    }
+                )
+                logits = model.generate_next_token(tgt_input, context_subset)
+
+                # Apply temperature scaling
+                logits = logits / temperature
+
+                # Apply top-k filtering
+                if top_k > 0:
+                    top_k_logits, top_k_indices = logits.topk(top_k, dim=-1)
+                    logits = torch.full_like(logits, float("-inf"))
+                    logits.scatter_(-1, top_k_indices, top_k_logits)
+
+                # Convert to probabilities
+                probs = F.softmax(logits, dim=-1)
+
+                # Apply top-p (nucleus) filtering
+                if top_p < 1.0:
+                    sorted_probs, sorted_indices = torch.sort(
+                        probs, descending=True, dim=-1
+                    )
+                    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+
+                    # Remove tokens with cumulative probability above the threshold
+                    sorted_indices_to_remove = cumulative_probs > top_p
+                    # Keep at least one token (the first one)
+                    sorted_indices_to_remove[..., 0] = False
+
+                    # Scatter back to original indexing
+                    indices_to_remove = sorted_indices_to_remove.scatter(
+                        -1, sorted_indices, sorted_indices_to_remove
+                    )
+                    probs = probs.masked_fill(indices_to_remove, 0.0)
+                    # Renormalize
+                    probs = probs / probs.sum(dim=-1, keepdim=True)
+
+                # Sample from the distribution
+                next_token = torch.multinomial(probs, num_samples=1).item()
+                output_tokens.append(next_token)
+
+                if next_token == eos_idx:
+                    break
+
+            results.append(torch.tensor(output_tokens, device=device))
+        return results
