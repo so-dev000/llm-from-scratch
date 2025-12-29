@@ -81,7 +81,7 @@ def main(
     model_type: str = "transformer",
     run_name: str = None,
     checkpoint_dir: str = "./checkpoints",
-    tokenizer_dir: str = "./tokenizers",
+    tokenizer_dir: str = "checkpoints/tokenizers",
 ):
     if model_type == "transformer":
         config = Config.for_transformer()
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     parser.add_argument("--model-type", type=str, default="transformer")
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--checkpoint-dir", type=str, default="./checkpoints")
-    parser.add_argument("--tokenizer-dir", type=str, default="./tokenizers")
+    parser.add_argument("--tokenizer-dir", type=str, default="checkpoints/tokenizers")
 
     args = parser.parse_args()
 
