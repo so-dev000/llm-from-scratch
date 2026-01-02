@@ -2,7 +2,7 @@ import os
 from typing import Optional
 
 import pytorch_lightning as L
-from datasets import DatasetDict, load_dataset
+from datasets import DatasetDict, load_dataset, load_from_disk
 from tokenizers import Tokenizer
 from torch.utils.data import DataLoader
 
@@ -141,7 +141,6 @@ class GPTDataModule(L.LightningDataModule):
             streaming=False,
         )
 
-        # Select only the required samples without loading all into memory
         dataset = dataset.select(range(min(num_samples, len(dataset))))
 
         split_data = dataset.train_test_split(
@@ -231,54 +230,19 @@ class LlamaDataModule(L.LightningDataModule):
         self.tokenizer = Tokenizer.from_file(tokenizer_path)
         self.config.model.vocab_size = self.tokenizer.get_vocab_size()
 
-        num_samples = self.config.data.tokenizer_train_samples
+        # Load preprocessed data from disk/volume
+        preprocessed_dir = f"/vol/preprocessed/{dataset_dir}"
+        if not os.path.exists(preprocessed_dir):
+            raise FileNotFoundError(
+                f"Preprocessed data not found at {preprocessed_dir}. "
+                f"Run scripts/preprocess_local.py first and upload to Modal volume."
+            )
 
-        dataset = load_dataset(
-            self.config.data.dataset_name,
-            self.config.data.dataset_config,
-            split="train",
-            streaming=False,
-        )
+        datasets = load_from_disk(preprocessed_dir)
+        datasets.set_format(type="torch", columns=["input_ids"])
 
-        # Select only the required samples without loading all into memory
-        dataset = dataset.select(range(min(num_samples, len(dataset))))
-
-        split_data = dataset.train_test_split(
-            test_size=self.config.data.val_split_size, seed=42
-        )
-
-        def preprocess_batch(batch):
-            texts = batch[self.config.data.text_column]
-            encodings = self.tokenizer.encode_batch(texts)
-            max_len = self.config.data.max_length
-            token_ids = [
-                enc.ids[:max_len] if len(enc.ids) > max_len else enc.ids
-                for enc in encodings
-            ]
-            return {"input_ids": token_ids}
-
-        train_data = split_data["train"].map(
-            preprocess_batch,
-            batched=True,
-            batch_size=self.config.data.preprocess_batch_size,
-            num_proc=self.config.data.preprocess_num_proc,
-            remove_columns=split_data["train"].column_names,
-            desc="Tokenizing train data",
-        )
-        val_data = split_data["test"].map(
-            preprocess_batch,
-            batched=True,
-            batch_size=self.config.data.preprocess_batch_size,
-            num_proc=self.config.data.preprocess_num_proc,
-            remove_columns=split_data["test"].column_names,
-            desc="Tokenizing val data",
-        )
-
-        train_data.set_format(type="torch", columns=["input_ids"])
-        val_data.set_format(type="torch", columns=["input_ids"])
-
-        self.train_dataset = train_data
-        self.val_dataset = val_data
+        self.train_dataset = datasets["train"]
+        self.val_dataset = datasets["val"]
 
     def train_dataloader(self):
         from utils.collate import collate_gpt

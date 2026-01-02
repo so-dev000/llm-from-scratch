@@ -1,110 +1,59 @@
 # LLM from Scratch
 
-Implementation of Transformer, GPT, and Llama models from scratch using PyTorch.
-
-## Resources
-
-- Blog: [Qiita @so_dev000](https://qiita.com/so_dev000)
-- Wiki: [DeepWiki](https://deepwiki.com/so-dev000/llm-from-scratch)
-
 ## Setup
 
 ```bash
-cp .env.example .env
-# Edit .env and add: WANDB_API_KEY
-
 uv sync
-
 modal setup
-modal secret create wandb-secret WANDB_API_KEY=your-wandb-key
+modal secret create wandb-secret WANDB_API_KEY=your-key
 ```
 
-## Workflow
+## Training Pipeline
 
-### Option A: Modal (Cloud GPU)
-
-#### 1. Prepare Tokenizer
+### 1. Prepare Tokenizer
 
 ```bash
 modal run scripts/prepare.py --model-type=llama
 ```
 
-#### 2. Train Model
+### 2. Preprocess Data (Local)
 
 ```bash
-modal run -d scripts/train.py --model-type=llama --run-name="llama-exp-1"
+python scripts/preprocess.py
 ```
 
-#### 3. Pull Model
+### 3. Upload Preprocessed Data to Modal
 
 ```bash
-modal run scripts/pull.py --run-name="llama-exp-1"
+modal volume put llm-from-scratch data/preprocessed/HuggingFaceFW_fineweb-edu /preprocessed/HuggingFaceFW_fineweb-edu
 ```
 
-### Option B: Local Training (Free)
-
-#### 1. Prepare Tokenizer
+### 4. Train Model
 
 ```bash
-python -m scripts.prepare_local --model-type=llama --num-samples=100000
+# GPU: H200 (140GB), batch_size=320
+modal run -d scripts/train.py --model-type=llama --run-name="llama-50M-2.5M-data"
 ```
 
-#### 2. Train Model
+### 5. Pull Model
 
 ```bash
-python -m scripts.train_local --model-type=llama --run-name="llama-exp-1"
+# Pull best model only
+modal run scripts/pull.py --run-name llama-50M-2.5M-data
+
+# Pull specific checkpoint file
+modal run scripts/pull.py --run-name llama-50M-2.5M-data --filename epoch-0.ckpt --no-best-model
 ```
 
-### Option C: Google Colab (Free GPU)
-
-1. Open `notebooks/train_llama_colab.ipynb` in Google Colab
-2. Runtime > Change runtime type > GPU (T4)
-3. Run all cells
-
-### Common Steps
-
-#### 3. Inference
+## Inference
 
 ```bash
-python -m scripts.inference --run-name="llama-exp-1" --model-type=llama --mode=local
-```
+# Interactive mode
+python -m scripts.inference --run-name llama-50M-2.5M-data --model-type llama
 
-#### 4. Evaluation
+# With epoch checkpoint
+python -m scripts.inference --run-name llama-50M-2.5M-data --model-type llama --checkpoint epoch-0.ckpt
 
-```bash
-python -m scripts.eval --run-name="llama-exp-1" --model-type=llama
-```
-
-#### 5. Visualization
-
-```bash
-python scripts/visualize_model.py llama
-```
-
-## Project Structure
-
-```
-scripts/
-  config.py              # Centralized configuration
-  prepare.py             # Tokenizer training (local) + upload to Modal
-  train.py               # Model training (Modal)
-  lightning_module.py    # PyTorch Lightning modules
-
-model/
-  transformer.py         # Transformer encoder-decoder
-  gpt.py                 # GPT decoder-only
-  llama.py               # Llama decoder-only with RoPE
-
-block/
-  llama_block.py         # Llama transformer block
-
-component/
-  attention.py           # Multi-head attention with GQA
-  feed_forward_swiglu.py # SwiGLU feedforward
-  rms_norm.py            # RMSNorm
-  rotary_embedding.py    # Rotary Position Embedding
-
-utils/
-  training_pipeline.py   # Data loading and preprocessing
-  decoding_strategy.py   # Inference strategies
+# With specific prompt
+python -m scripts.inference --run-name llama-50M-2.5M-data --model-type llama --prompt "Hello, how are you?"
 ```
